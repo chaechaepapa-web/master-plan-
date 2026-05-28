@@ -1,0 +1,6 @@
+{
+  "name": "Project Health Board",
+  "description": "위험 지표 연동형 마스터플랜 및 프로젝트 헬스케어 종합 모니터링 보드",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
