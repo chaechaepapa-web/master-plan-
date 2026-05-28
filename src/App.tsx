@@ -274,6 +274,7 @@ export default function App() {
 
   // 프로젝트별 자동 보존 및 상호 매핑 정책
   useEffect(() => {
+    if (!activeProjectId) return;
     const key = activeProjectId === "proj_default" ? "hb_project" : `hb_project_${activeProjectId}`;
     localStorage.setItem(key, JSON.stringify(project));
     
@@ -282,21 +283,25 @@ export default function App() {
   }, [project, activeProjectId]);
 
   useEffect(() => {
+    if (!activeProjectId) return;
     const key = activeProjectId === "proj_default" ? "hb_phases" : `hb_project_${activeProjectId}_phases`;
     localStorage.setItem(key, JSON.stringify(phases));
   }, [phases, activeProjectId]);
 
   useEffect(() => {
+    if (!activeProjectId) return;
     const key = activeProjectId === "proj_default" ? "hb_tasks" : `hb_project_${activeProjectId}_tasks`;
     localStorage.setItem(key, JSON.stringify(tasks));
   }, [tasks, activeProjectId]);
 
   useEffect(() => {
+    if (!activeProjectId) return;
     const key = activeProjectId === "proj_default" ? "hb_milestones" : `hb_project_${activeProjectId}_milestones`;
     localStorage.setItem(key, JSON.stringify(milestones));
   }, [milestones, activeProjectId]);
 
   useEffect(() => {
+    if (!activeProjectId) return;
     const key = activeProjectId === "proj_default" ? "hb_risks" : `hb_project_${activeProjectId}_risks`;
     localStorage.setItem(key, JSON.stringify(risks));
   }, [risks, activeProjectId]);
@@ -469,11 +474,6 @@ export default function App() {
   };
 
   const handleDeleteProject = (pId: string) => {
-    if (projects.length <= 1) {
-      showToast("⚠️ 최소 한 개 이상의 메인 프로젝트가 존재해야 하므로 삭제할 수 없습니다.");
-      return;
-    }
-
     const targetProj = projects.find(p => p.id === pId);
     if (!targetProj) return;
 
@@ -559,32 +559,48 @@ export default function App() {
 
     // 활성중인 기안을 지운 경우
     if (activeProjectId === pId) {
-      const nextActiveId = filtered[0].id || "proj_default";
-      localStorage.setItem("hb_active_project_id", nextActiveId);
-      setActiveProjectId(nextActiveId);
+      if (filtered.length > 0) {
+        const nextActiveId = filtered[0].id || "proj_default";
+        localStorage.setItem("hb_active_project_id", nextActiveId);
+        setActiveProjectId(nextActiveId);
 
-      const nextKey = nextActiveId === "proj_default" ? "hb_project" : `hb_project_${nextActiveId}`;
-      const nextPhKey = nextActiveId === "proj_default" ? "hb_phases" : `hb_project_${nextActiveId}_phases`;
-      const nextTKey = nextActiveId === "proj_default" ? "hb_tasks" : `hb_project_${nextActiveId}_tasks`;
-      const nextMKey = nextActiveId === "proj_default" ? "hb_milestones" : `hb_project_${nextActiveId}_milestones`;
-      const nextRKey = nextActiveId === "proj_default" ? "hb_risks" : `hb_project_${nextActiveId}_risks`;
+        const nextKey = nextActiveId === "proj_default" ? "hb_project" : `hb_project_${nextActiveId}`;
+        const nextPhKey = nextActiveId === "proj_default" ? "hb_phases" : `hb_project_${nextActiveId}_phases`;
+        const nextTKey = nextActiveId === "proj_default" ? "hb_tasks" : `hb_project_${nextActiveId}_tasks`;
+        const nextMKey = nextActiveId === "proj_default" ? "hb_milestones" : `hb_project_${nextActiveId}_milestones`;
+        const nextRKey = nextActiveId === "proj_default" ? "hb_risks" : `hb_project_${nextActiveId}_risks`;
 
-      const savedProject = localStorage.getItem(nextKey);
-      const savedPhases = localStorage.getItem(nextPhKey);
-      const savedTasks = localStorage.getItem(nextTKey);
-      const savedMilestones = localStorage.getItem(nextMKey);
-      const savedRisks = localStorage.getItem(nextRKey);
+        const savedProject = localStorage.getItem(nextKey);
+        const savedPhases = localStorage.getItem(nextPhKey);
+        const savedTasks = localStorage.getItem(nextTKey);
+        const savedMilestones = localStorage.getItem(nextMKey);
+        const savedRisks = localStorage.getItem(nextRKey);
 
-      const nextInfo = filtered[0];
-      setProject(savedProject ? JSON.parse(savedProject) : { ...nextInfo });
-      setPhases(savedPhases ? JSON.parse(savedPhases) : (nextActiveId === "proj_default" ? defaultPhases : [
-        { id: `${nextActiveId}_p1`, name: "기획 및 요구사항 구체화", color: "indigo" },
-        { id: `${nextActiveId}_p2`, name: "시스템 아키텍처 및 설계", color: "emerald" },
-        { id: `${nextActiveId}_p3`, name: "개발 및 QA (알파/베타)", color: "purple" }
-      ]));
-      setTasks(savedTasks ? JSON.parse(savedTasks) : (nextActiveId === "proj_default" ? defaultTasks : []));
-      setMilestones(savedMilestones ? JSON.parse(savedMilestones) : (nextActiveId === "proj_default" ? defaultMilestones : []));
-      setRisks(savedRisks ? JSON.parse(savedRisks) : (nextActiveId === "proj_default" ? defaultRisks : []));
+        const nextInfo = filtered[0];
+        setProject(savedProject ? JSON.parse(savedProject) : { ...nextInfo });
+        setPhases(savedPhases ? JSON.parse(savedPhases) : (nextActiveId === "proj_default" ? defaultPhases : [
+          { id: `${nextActiveId}_p1`, name: "기획 및 요구사항 구체화", color: "indigo" },
+          { id: `${nextActiveId}_p2`, name: "시스템 아키텍처 및 설계", color: "emerald" },
+          { id: `${nextActiveId}_p3`, name: "개발 및 QA (알파/베타)", color: "purple" }
+        ]));
+        setTasks(savedTasks ? JSON.parse(savedTasks) : (nextActiveId === "proj_default" ? defaultTasks : []));
+        setMilestones(savedMilestones ? JSON.parse(savedMilestones) : (nextActiveId === "proj_default" ? defaultMilestones : []));
+        setRisks(savedRisks ? JSON.parse(savedRisks) : (nextActiveId === "proj_default" ? defaultRisks : []));
+      } else {
+        localStorage.removeItem("hb_active_project_id");
+        setActiveProjectId("");
+        setProject({
+          id: "",
+          title: "",
+          pm: "",
+          startDate: "",
+          endDate: ""
+        });
+        setPhases([]);
+        setTasks([]);
+        setMilestones([]);
+        setRisks([]);
+      }
     }
 
     showToast(`🗑️ '${targetProj.title}' 프로젝트가 휴지통으로 이동되었습니다.`);
@@ -1193,156 +1209,163 @@ export default function App() {
                 </div>
 
                 <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 pad-y-1 custom-scrollbar">
-                  {projects.map((proj) => {
-                    const isActive = (proj.id || "proj_default") === activeProjectId;
-                    const stats = getProjectStats(proj.id || "proj_default");
+                  {projects.length === 0 ? (
+                    <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-200 text-center space-y-3">
+                      <FolderPlus className="w-12 h-12 text-slate-300 mx-auto animate-bounce" />
+                      <h5 className="font-extrabold text-slate-700 text-sm">가용한 활성 프로젝트가 존재하지 않습니다.</h5>
+                      <p className="text-slate-400 text-xs leading-relaxed">왼쪽의 '새로운 프로젝트 마스터 개설' 구역에서 신규 마스터플랜 프로젝트를 설정하고 가동하여 주십시오.</p>
+                    </div>
+                  ) : (
+                    projects.map((proj) => {
+                      const isActive = (proj.id || "proj_default") === activeProjectId;
+                      const stats = getProjectStats(proj.id || "proj_default");
 
-                    return (
-                      <div
-                        key={proj.id || "proj_default"}
-                        className={`p-6 rounded-2xl border transition-all duration-300 bg-white relative overflow-hidden ${
-                          isActive
-                            ? "border-indigo-400 shadow-md ring-2 ring-indigo-50"
-                            : "border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md"
-                        }`}
-                      >
-                        {isActive && (
-                          <div className="absolute top-0 right-0">
-                            <span className="bg-gradient-to-l from-indigo-600 to-indigo-500 text-white font-extrabold text-[10px] uppercase tracking-wider py-1.5 px-4 rounded-bl-xl shadow-sm flex items-center gap-1">
-                              <ShieldCheck className="w-3.5 h-3.5" />
-                              <span>직전 가동 (Active)</span>
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
-                          <div className="space-y-2 max-w-lg">
-                            <div className="flex items-center gap-2">
-                              {isActive && <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-ping" />}
-                              <h5 className="font-extrabold text-slate-900 text-base leading-snug break-all">
-                                {proj.title}
-                              </h5>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-y-2 gap-x-3 text-xs text-slate-500 font-semibold mt-1">
-                              <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                <User className="w-3.5 h-3.5 text-slate-400" />
-                                PM: {proj.pm || "미지정"}
+                      return (
+                        <div
+                          key={proj.id || "proj_default"}
+                          className={`p-6 rounded-2xl border transition-all duration-300 bg-white relative overflow-hidden ${
+                            isActive
+                              ? "border-indigo-400 shadow-md ring-2 ring-indigo-50"
+                              : "border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md"
+                          }`}
+                        >
+                          {isActive && (
+                            <div className="absolute top-0 right-0">
+                              <span className="bg-gradient-to-l from-indigo-600 to-indigo-500 text-white font-extrabold text-[10px] uppercase tracking-wider py-1.5 px-4 rounded-bl-xl shadow-sm flex items-center gap-1">
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                                <span>직전 가동 (Active)</span>
                               </span>
-                              <span className="text-slate-300">|</span>
-                              <span className="flex items-center gap-1 bg-slate-50 text-slate-600 px-2.5 py-0.5 rounded-md font-medium">
-                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                {proj.startDate} ~ {proj.endDate}
-                              </span>
-                              {proj.password && (
-                                <>
-                                  <span className="text-slate-300">|</span>
-                                  {isProjectUnlocked(proj.id) ? (
-                                    <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md flex items-center gap-1 font-bold border border-emerald-100">
-                                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                                      🔓 편집허용 (해제됨)
-                                    </span>
-                                  ) : (
-                                    <button 
-                                      onClick={() => checkUnlockAndRun(proj.id, () => {
-                                        showToast("🔓 프로젝트의 편집 권한을 확보했습니다.");
-                                      })}
-                                      className="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1 font-extrabold border border-amber-200 cursor-pointer transition-all text-xs"
-                                      title="비밀번호 입력 후 편집 차단 해제"
-                                    >
-                                      <span>🔒 편집제한 (잠금해제 대기)</span>
-                                    </button>
-                                  )}
-                                </>
-                              )}
                             </div>
-                          </div>
+                          )}
 
-                          <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
-                            <button
-                              onClick={() => selectProject(proj.id || "proj_default")}
-                              className="px-4 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.01] inline-flex items-center gap-1.5"
-                            >
-                              <Zap className="w-3.5 h-3.5" />
-                              <span>상세 계획 관리 진입 →</span>
-                            </button>
+                          <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
+                            <div className="space-y-2 max-w-lg">
+                              <div className="flex items-center gap-2">
+                                {isActive && <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-ping" />}
+                                <h5 className="font-extrabold text-slate-900 text-base leading-snug break-all">
+                                  {proj.title}
+                                </h5>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-y-2 gap-x-3 text-xs text-slate-500 font-semibold mt-1">
+                                <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                  <User className="w-3.5 h-3.5 text-slate-400" />
+                                  PM: {proj.pm || "미지정"}
+                                </span>
+                                <span className="text-slate-300">|</span>
+                                <span className="flex items-center gap-1 bg-slate-50 text-slate-600 px-2.5 py-0.5 rounded-md font-medium">
+                                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                  {proj.startDate} ~ {proj.endDate}
+                                </span>
+                                {proj.password && (
+                                  <>
+                                    <span className="text-slate-300">|</span>
+                                    {isProjectUnlocked(proj.id) ? (
+                                      <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md flex items-center gap-1 font-bold border border-emerald-100">
+                                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                                        🔓 편집허용 (해제됨)
+                                      </span>
+                                    ) : (
+                                      <button 
+                                        onClick={() => checkUnlockAndRun(proj.id, () => {
+                                          showToast("🔓 프로젝트의 편집 권한을 확보했습니다.");
+                                        })}
+                                        className="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1 font-extrabold border border-amber-200 cursor-pointer transition-all text-xs"
+                                        title="비밀번호 입력 후 편집 차단 해제"
+                                      >
+                                        <span>🔒 편집제한 (잠금해제 대기)</span>
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
 
-                            {/* 관리자 비밀번호 초기화 버튼 */}
-                            {proj.password && (
+                            <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
                               <button
                                 onClick={() => {
-                                  const adminPw = prompt("🤫 관리자 비밀번호를 입력해주세요:");
-                                  if (adminPw === null) return;
-                                  if (adminPw === "7155") {
-                                    setProjects(prev => prev.map(p => p.id === proj.id ? { ...p, password: undefined } : p));
-                                    const pKey = proj.id === "proj_default" ? "hb_project" : `hb_project_${proj.id}`;
-                                    const savedPObj = localStorage.getItem(pKey);
-                                    if (savedPObj) {
-                                      try {
-                                        const parsed = JSON.parse(savedPObj);
-                                        parsed.password = undefined;
-                                        localStorage.setItem(pKey, JSON.stringify(parsed));
-                                      } catch (e) {}
-                                    }
-                                    if (activeProjectId === proj.id) {
-                                      setProject(prev => ({ ...prev, password: undefined }));
-                                    }
-                                    setUnlockedProjects(prev => ({ ...prev, [proj.id || ""]: true }));
-                                    showToast("🔓 관리자 권한으로 프로젝트 비밀번호가 초기화되었습니다!");
-                                  } else {
-                                    alert("❌ 관리자 비밀번호가 올바르지 않습니다. (7155)");
-                                  }
+                                  checkUnlockAndRun(proj.id || "proj_default", () => {
+                                    selectProject(proj.id || "proj_default");
+                                  });
                                 }}
-                                className="p-2.5 bg-white text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-100 border-slate-200 rounded-xl text-xs font-bold transition-all border shadow-sm inline-flex items-center justify-center cursor-pointer"
-                                title="관리자 권한 비밀번호 초기화 (7155)"
+                                className="px-4 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.01] inline-flex items-center gap-1.5"
                               >
-                                <RotateCcw className="w-4 h-4" />
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>상세 계획 관리 진입 →</span>
                               </button>
-                            )}
 
-                            {/* 삭제 버튼 - 휴지통 전직 */}
-                            <button
-                              onClick={() => {
-                                checkUnlockAndRun(proj.id || "proj_default", () => {
-                                  if (confirm(`🚨 [프로젝트 삭제 확인]\n정말 '${proj.title}' 프로젝트를 삭제하시겠습니까?\n\n삭제된 프로젝트와 세부 기획 일정, 마일스톤, 위험 레지스터 정보는 아래 '보관 폴더 휴지통' 구역으로 전송되어 언제든지 손실 없이 완벽 복구하실 수 있습니다.`)) {
-                                    handleDeleteProject(proj.id || "proj_default");
-                                  }
-                                });
-                              }}
-                              disabled={projects.length <= 1}
-                              className={`p-2.5 rounded-xl text-xs font-bold transition-all border shadow-sm inline-flex items-center justify-center ${
-                                projects.length <= 1
-                                  ? "bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed"
-                                  : "bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 border-slate-200 cursor-pointer"
-                              }`}
-                              title={projects.length <= 1 ? "최소 하나의 프로젝트 가동이 필요하여 삭제할 수 없습니다" : "프로젝트를 임시 삭제 후 휴지통에 보관"}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              {/* 관리자 비밀번호 초기화 버튼 */}
+                              {proj.password && (
+                                <button
+                                  onClick={() => {
+                                    const adminPw = prompt("🤫 관리자 비밀번호를 입력해주세요:");
+                                    if (adminPw === null) return;
+                                    if (adminPw === "7155") {
+                                      setProjects(prev => prev.map(p => p.id === proj.id ? { ...p, password: undefined } : p));
+                                      const pKey = proj.id === "proj_default" ? "hb_project" : `hb_project_${proj.id}`;
+                                      const savedPObj = localStorage.getItem(pKey);
+                                      if (savedPObj) {
+                                        try {
+                                          const parsed = JSON.parse(savedPObj);
+                                          parsed.password = undefined;
+                                          localStorage.setItem(pKey, JSON.stringify(parsed));
+                                        } catch (e) {}
+                                      }
+                                      if (activeProjectId === proj.id) {
+                                        setProject(prev => ({ ...prev, password: undefined }));
+                                      }
+                                      setUnlockedProjects(prev => ({ ...prev, [proj.id || ""]: true }));
+                                      showToast("🔓 관리자 권한으로 프로젝트 비밀번호가 초기화되었습니다!");
+                                    } else {
+                                      alert("❌ 관리자 비밀번호가 올바르지 않습니다. (7155)");
+                                    }
+                                  }}
+                                  className="p-2.5 bg-white text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-100 border-slate-200 rounded-xl text-xs font-bold transition-all border shadow-sm inline-flex items-center justify-center cursor-pointer"
+                                  title="관리자 권한 비밀번호 초기화 (7155)"
+                                >
+                                  <RotateCcw className="w-4 h-4" />
+                                </button>
+                              )}
+
+                              {/* 삭제 버튼 - 휴지통 전직 */}
+                              <button
+                                onClick={() => {
+                                  checkUnlockAndRun(proj.id || "proj_default", () => {
+                                    if (confirm(`🚨 [프로젝트 삭제 확인]\n정말 '${proj.title}' 프로젝트를 삭제하시겠습니까?\n\n삭제된 프로젝트와 세부 기획 일정, 마일스톤, 위험 레지스터 정보는 아래 '보관 폴더 휴지통' 구역으로 전송되어 언제든지 손실 없이 완벽 복구하실 수 있습니다.`)) {
+                                      handleDeleteProject(proj.id || "proj_default");
+                                    }
+                                  });
+                                }}
+                                className="p-2.5 rounded-xl text-xs font-bold transition-all border shadow-sm inline-flex items-center justify-center bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 border-slate-200 cursor-pointer"
+                                title="프로젝트를 임시 삭제 후 휴지통에 보관"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 하단 요약 메트릭 컴포넌트 */}
+                          <div className="grid grid-cols-4 gap-3 mt-5 bg-slate-50/70 p-4 rounded-xl border border-slate-100/80">
+                            <div>
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">프로젝트 순기</span>
+                              <span className="text-xs font-extrabold text-slate-600">{stats.phCount}개 단계</span>
+                            </div>
+                            <div className="border-l border-slate-200/60 pl-3">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">세부 테스크</span>
+                              <span className="text-sm font-extrabold text-indigo-600">{stats.tCount}개 작업</span>
+                            </div>
+                            <div className="border-l border-slate-200/60 pl-3">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">마일스톤</span>
+                              <span className="text-sm font-extrabold text-emerald-600">{stats.mCount}개 수립</span>
+                            </div>
+                            <div className="border-l border-slate-200/60 pl-3">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">위험 관리</span>
+                              <span className="text-sm font-extrabold text-amber-600">{stats.rCount}건 포착</span>
+                            </div>
                           </div>
                         </div>
-
-                        {/* 하단 요약 메트릭 컴포넌트 */}
-                        <div className="grid grid-cols-4 gap-3 mt-5 bg-slate-50/70 p-4 rounded-xl border border-slate-100/80">
-                          <div>
-                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">프로젝트 순기</span>
-                            <span className="text-xs font-extrabold text-slate-600">{stats.phCount}개 단계</span>
-                          </div>
-                          <div className="border-l border-slate-200/60 pl-3">
-                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">세부 테스크</span>
-                            <span className="text-sm font-extrabold text-indigo-600">{stats.tCount}개 작업</span>
-                          </div>
-                          <div className="border-l border-slate-200/60 pl-3">
-                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">마일스톤</span>
-                            <span className="text-sm font-extrabold text-emerald-600">{stats.mCount}개 수립</span>
-                          </div>
-                          <div className="border-l border-slate-200/60 pl-3">
-                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">위험 관리</span>
-                            <span className="text-sm font-extrabold text-amber-600">{stats.rCount}건 포착</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
