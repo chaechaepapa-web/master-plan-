@@ -4,7 +4,6 @@ export interface ProjectInfo {
   pm: string;
   startDate: string;
   endDate: string;
-  password?: string;
 }
 
 export interface Phase {
