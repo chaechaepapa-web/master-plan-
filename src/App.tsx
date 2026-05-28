@@ -22,7 +22,13 @@ import {
   Sparkles,
   UserCheck,
   ArrowLeft,
-  RotateCcw
+  RotateCcw,
+  Lock,
+  Unlock,
+  LogIn,
+  AlertCircle,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { ProjectInfo, Phase, Task, Milestone, Risk } from "./types";
 
@@ -64,6 +70,56 @@ const defaultRisks: Risk[] = [
 ];
 
 export default function App() {
+  // --- 로그인 상태 관리 및 크리덴셜 통제 ---
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return sessionStorage.getItem("hb_logged_in") === "true";
+  });
+  const [usernameInput, setUsernameInput] = useState<string>("");
+  const [passwordInput, setPasswordInput] = useState<string>("");
+  const [loginError, setLoginError] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [failedAttempts, setFailedAttempts] = useState<number>(0);
+  const [lockoutTimeRemaining, setLockoutTimeRemaining] = useState<number>(0);
+
+  useEffect(() => {
+    if (lockoutTimeRemaining <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutTimeRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutTimeRemaining]);
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (lockoutTimeRemaining > 0) {
+      setLoginError(`보안 정책에 의해 일시 잠금되었습니다. ${lockoutTimeRemaining}초 후에 다시 시도해주세요.`);
+      return;
+    }
+
+    if (usernameInput === "dnsae" && passwordInput === "ae7155") {
+      sessionStorage.setItem("hb_logged_in", "true");
+      setIsLoggedIn(true);
+      setLoginError("");
+      setFailedAttempts(0);
+      showToast("🔐 인증이 정상 조율되어 통합 제어반으로 진입합니다.");
+    } else {
+      const nextFailCount = failedAttempts + 1;
+      setFailedAttempts(nextFailCount);
+      if (nextFailCount >= 5) {
+        setLockoutTimeRemaining(30);
+        setLoginError("보안 정책: 5회 연속 로그인 실패로 인해 계정 진입이 30초 동안 잠금 조치되었습니다.");
+      } else {
+        setLoginError(`입력하신 아이디 또는 비밀번호가 올바르지 않습니다. (오류 횟수: ${nextFailCount}/5)`);
+      }
+    }
+  };
+
   // --- 상태 관리 ---
   const [projects, setProjects] = useState<ProjectInfo[]>(() => {
     const saved = localStorage.getItem("hb_projects_list");
@@ -908,6 +964,94 @@ export default function App() {
 
   const projectHealth = calcProjectHealth();
 
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 p-4 font-sans antialiased relative overflow-hidden">
+        {/* Ambient artistic background blobs */}
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-100/40 blur-3xl pointer-events-none"></div>
+        <div className="absolute -bottom-45 -right-45 w-96 h-96 rounded-full bg-rose-100/30 blur-3xl pointer-events-none"></div>
+
+        <div className="w-full max-w-md bg-white rounded-3xl border border-slate-200/90 shadow-2xl p-8 md:p-10 relative z-10 transition-all duration-300">
+          <div className="flex flex-col mb-8 text-center items-center">
+            {/* Logo Emblem */}
+            <div className="bg-gradient-to-tr from-indigo-600 to-indigo-400 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-500/20 mb-5">
+              <Lock className="w-6 h-6 animate-pulse" />
+            </div>
+            
+            <h1 id="dns-ae-nad-board-title" className="text-2xl font-black text-slate-900 tracking-tight">DNS AE NAD BOARD</h1>
+            <p className="text-xs text-indigo-600 font-bold uppercase tracking-widest mt-1.5">통합 포트폴리오 안전 통제반</p>
+            <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-xs mt-3.5">
+              위험 지표 연동형 마인드맵 및 프로젝트 헬스케어의 원활한 종합 모니터링을 관장합니다. 시스템 보호를 위한 시큐어 크리덴셜 로그인이 필요합니다.
+            </p>
+          </div>
+
+          <form onSubmit={handleLoginSubmit} className="space-y-5">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">클라이언트 아이디</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  autoComplete="username"
+                  value={usernameInput}
+                  onChange={(e) => setUsernameInput(e.target.value)}
+                  placeholder="아이디를 입력하세요"
+                  disabled={lockoutTimeRemaining > 0}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 placeholder-slate-400 font-medium transition-all text-slate-800 bg-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">패스코드 (비밀번호)</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="current-password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="비밀번호를 입력하세요"
+                  disabled={lockoutTimeRemaining > 0}
+                  className="w-full pl-4 pr-11 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 placeholder-slate-400 font-medium transition-all text-slate-800 bg-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={lockoutTimeRemaining > 0}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none cursor-pointer disabled:cursor-not-allowed"
+                  title={showPassword ? "비밀번호 숨기기" : "비밀번호 표시"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {loginError && (
+              <div className="text-xs flex items-center space-x-2.5 bg-rose-50 border border-rose-100 text-rose-600 px-4 py-3 rounded-xl animate-fadeIn">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span className="font-semibold">{loginError}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={lockoutTimeRemaining > 0}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white py-3.5 rounded-xl text-xs font-extrabold tracking-wider uppercase transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center justify-center space-x-2 hover:shadow-lg hover:shadow-indigo-600/20 disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>로그인 및 제어반 진입</span>
+            </button>
+          </form>
+
+          <div className="text-[10px] text-slate-400 text-center font-bold tracking-widest uppercase mt-8 pt-4 border-t border-slate-100">
+            HealthBoard Port &copy; 2026 Admin Panel
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activeTab === "projects") {
     return (
       <div className="h-screen w-full flex flex-col bg-slate-50 overflow-hidden font-sans antialiased">
@@ -964,6 +1108,19 @@ export default function App() {
               <Calendar className="w-3.5 h-3.5 text-indigo-500" />
               <span>기준시점: {todayStr}</span>
             </span>
+
+            <button
+              onClick={() => {
+                sessionStorage.removeItem("hb_logged_in");
+                setIsLoggedIn(false);
+                showToast("🔒 성공적으로 로그아웃되었습니다.");
+              }}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 hover:text-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="로그아웃"
+            >
+              <LogIn className="w-3.5 h-3.5 rotate-180" />
+              <span>로그아웃</span>
+            </button>
           </div>
         </header>
 
@@ -1508,6 +1665,19 @@ export default function App() {
               {projectHealth === "Green" ? "정상 가동 (On Track)" : projectHealth === "Yellow" ? "주의 관찰 (At Risk)" : "동력 상실 (Off Track)"}
             </span>
           </div>
+
+          <button
+            onClick={() => {
+              sessionStorage.removeItem("hb_logged_in");
+              setIsLoggedIn(false);
+              showToast("🔒 성공적으로 로그아웃되었습니다.");
+            }}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 hover:text-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+            title="로그아웃"
+          >
+            <LogIn className="w-3.5 h-3.5 rotate-180" />
+            <span>로그아웃</span>
+          </button>
           </div>
         </header>
 
