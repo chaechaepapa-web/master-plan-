@@ -1,4 +1,5 @@
 export interface ProjectInfo {
+  id?: string;
   title: string;
   pm: string;
   startDate: string;
@@ -8,7 +9,7 @@ export interface ProjectInfo {
 export interface Phase {
   id: string;
   name: string;
-  color: 'indigo' | 'emerald' | 'amber' | 'rose' | 'purple';
+  color: string;
 }
 
 export interface Task {

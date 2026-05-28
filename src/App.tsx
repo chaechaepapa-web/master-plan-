@@ -20,7 +20,9 @@ import {
   X,
   ChevronRight,
   Sparkles,
-  UserCheck
+  UserCheck,
+  ArrowLeft,
+  RotateCcw
 } from "lucide-react";
 import { ProjectInfo, Phase, Task, Milestone, Risk } from "./types";
 
@@ -63,32 +65,131 @@ const defaultRisks: Risk[] = [
 
 export default function App() {
   // --- 상태 관리 ---
+  const [projects, setProjects] = useState<ProjectInfo[]>(() => {
+    const saved = localStorage.getItem("hb_projects_list");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((p, idx) => ({ ...p, id: p.id || `proj_${idx}` }));
+        }
+      } catch (e) {}
+    }
+    return [{ ...defaultProject, id: "proj_default" }];
+  });
+
+  const [trashProjects, setTrashProjects] = useState<any[]>(() => {
+    const saved = localStorage.getItem("hb_projects_trash");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const [activeProjectId, setActiveProjectId] = useState<string>(() => {
+    const saved = localStorage.getItem("hb_active_project_id");
+    return saved || "proj_default";
+  });
+
   const [project, setProject] = useState<ProjectInfo>(() => {
-    const saved = localStorage.getItem("hb_project");
-    return saved ? JSON.parse(saved) : defaultProject;
+    const pId = localStorage.getItem("hb_active_project_id") || "proj_default";
+    const pKey = pId === "proj_default" ? "hb_project" : `hb_project_${pId}`;
+    const saved = localStorage.getItem(pKey);
+    if (saved) {
+      try {
+        return { ...JSON.parse(saved), id: pId };
+      } catch (e) {}
+    }
+    // Fallback to legacy single-project hb_project if it's default
+    const legacy = localStorage.getItem("hb_project");
+    if (pId === "proj_default" && legacy) {
+      try {
+        return { ...JSON.parse(legacy), id: "proj_default" };
+      } catch (e) {}
+    }
+    return { ...defaultProject, id: pId };
   });
 
   const [phases, setPhases] = useState<Phase[]>(() => {
-    const saved = localStorage.getItem("hb_phases");
-    return saved ? JSON.parse(saved) : defaultPhases;
+    const pId = localStorage.getItem("hb_active_project_id") || "proj_default";
+    const phKey = pId === "proj_default" ? "hb_phases" : `hb_project_${pId}_phases`;
+    const saved = localStorage.getItem(phKey);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    // Fallback to legacy single-project hb_phases if it's default
+    const legacy = localStorage.getItem("hb_phases");
+    if (pId === "proj_default" && legacy) {
+      try {
+        return JSON.parse(legacy);
+      } catch (e) {}
+    }
+    return defaultPhases;
   });
 
   const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem("hb_tasks");
-    return saved ? JSON.parse(saved) : defaultTasks;
+    const pId = localStorage.getItem("hb_active_project_id") || "proj_default";
+    const tKey = pId === "proj_default" ? "hb_tasks" : `hb_project_${pId}_tasks`;
+    const saved = localStorage.getItem(tKey);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    // Fallback to legacy single-project hb_tasks if it's default
+    const legacy = localStorage.getItem("hb_tasks");
+    if (pId === "proj_default" && legacy) {
+      try {
+        return JSON.parse(legacy);
+      } catch (e) {}
+    }
+    return defaultTasks;
   });
 
   const [milestones, setMilestones] = useState<Milestone[]>(() => {
-    const saved = localStorage.getItem("hb_milestones");
-    return saved ? JSON.parse(saved) : defaultMilestones;
+    const pId = localStorage.getItem("hb_active_project_id") || "proj_default";
+    const mKey = pId === "proj_default" ? "hb_milestones" : `hb_project_${pId}_milestones`;
+    const saved = localStorage.getItem(mKey);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    // Fallback to legacy single-project hb_milestones if it's default
+    const legacy = localStorage.getItem("hb_milestones");
+    if (pId === "proj_default" && legacy) {
+      try {
+        return JSON.parse(legacy);
+      } catch (e) {}
+    }
+    return defaultMilestones;
   });
 
   const [risks, setRisks] = useState<Risk[]>(() => {
-    const saved = localStorage.getItem("hb_risks");
-    return saved ? JSON.parse(saved) : defaultRisks;
+    const pId = localStorage.getItem("hb_active_project_id") || "proj_default";
+    const rKey = pId === "proj_default" ? "hb_risks" : `hb_project_${pId}_risks`;
+    const saved = localStorage.getItem(rKey);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    // Fallback to legacy single-project hb_risks if it's default
+    const legacy = localStorage.getItem("hb_risks");
+    if (pId === "proj_default" && legacy) {
+      try {
+        return JSON.parse(legacy);
+      } catch (e) {}
+    }
+    return defaultRisks;
   });
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "gantt" | "milestones" | "risks">("dashboard");
+  const [activeTab, setActiveTab] = useState<"projects" | "dashboard" | "gantt" | "milestones" | "risks">("projects");
+  const [showMilestonesOnGantt, setShowMilestonesOnGantt] = useState<boolean>(true);
   const [toast, setToast] = useState<{ show: boolean; msg: string }>({ show: false, msg: "" });
 
   // 모달 제어용 상태
@@ -105,26 +206,48 @@ export default function App() {
   // 시스템 기준 날짜 (현재 local time: 2026-05-28)
   const todayStr = "2026-05-28";
 
-  // 로컬 스토리지 자동 보존 정책
+  // 프로젝트별 자동 보존 및 상호 매핑 정책
   useEffect(() => {
-    localStorage.setItem("hb_project", JSON.stringify(project));
+    const key = activeProjectId === "proj_default" ? "hb_project" : `hb_project_${activeProjectId}`;
+    localStorage.setItem(key, JSON.stringify(project));
+    
+    // projects 리스트 내부 필드 상태도 동기화해둡니다.
+    setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, title: project.title, pm: project.pm, startDate: project.startDate, endDate: project.endDate } : p));
+  }, [project, activeProjectId]);
+
+  useEffect(() => {
+    const key = activeProjectId === "proj_default" ? "hb_phases" : `hb_project_${activeProjectId}_phases`;
+    localStorage.setItem(key, JSON.stringify(phases));
+  }, [phases, activeProjectId]);
+
+  useEffect(() => {
+    const key = activeProjectId === "proj_default" ? "hb_tasks" : `hb_project_${activeProjectId}_tasks`;
+    localStorage.setItem(key, JSON.stringify(tasks));
+  }, [tasks, activeProjectId]);
+
+  useEffect(() => {
+    const key = activeProjectId === "proj_default" ? "hb_milestones" : `hb_project_${activeProjectId}_milestones`;
+    localStorage.setItem(key, JSON.stringify(milestones));
+  }, [milestones, activeProjectId]);
+
+  useEffect(() => {
+    const key = activeProjectId === "proj_default" ? "hb_risks" : `hb_project_${activeProjectId}_risks`;
+    localStorage.setItem(key, JSON.stringify(risks));
+  }, [risks, activeProjectId]);
+
+  useEffect(() => {
+    localStorage.setItem("hb_projects_list", JSON.stringify(projects));
+  }, [projects]);
+
+  useEffect(() => {
+    setEditingProject({ ...project });
   }, [project]);
 
-  useEffect(() => {
-    localStorage.setItem("hb_phases", JSON.stringify(phases));
-  }, [phases]);
-
-  useEffect(() => {
-    localStorage.setItem("hb_tasks", JSON.stringify(tasks));
-  }, [tasks]);
-
-  useEffect(() => {
-    localStorage.setItem("hb_milestones", JSON.stringify(milestones));
-  }, [milestones]);
-
-  useEffect(() => {
-    localStorage.setItem("hb_risks", JSON.stringify(risks));
-  }, [risks]);
+  // 새로운 프로젝트 추가 입력 폼 데이터
+  const [newProjTitle, setNewProjTitle] = useState("");
+  const [newProjPm, setNewProjPm] = useState("");
+  const [newProjStartDate, setNewProjStartDate] = useState("2026-06-01");
+  const [newProjEndDate, setNewProjEndDate] = useState("2026-12-31");
 
   // 토스트 팝업 제어
   const showToast = (msg: string) => {
@@ -209,6 +332,273 @@ export default function App() {
       safetyCounter++;
     }
     return months;
+  };
+
+  // --- 프로젝트 관리 및 전환 핸들러 ---
+  const selectProject = (pId: string) => {
+    // 1. 현재 주도하는 상태 리ко드를 로컬 스토리지 키로 안전하게 선 백업 보관
+    const currentProjKey = activeProjectId === "proj_default" ? "hb_project" : `hb_project_${activeProjectId}`;
+    const currentPhKey = activeProjectId === "proj_default" ? "hb_phases" : `hb_project_${activeProjectId}_phases`;
+    const currentTKey = activeProjectId === "proj_default" ? "hb_tasks" : `hb_project_${activeProjectId}_tasks`;
+    const currentMKey = activeProjectId === "proj_default" ? "hb_milestones" : `hb_project_${activeProjectId}_milestones`;
+    const currentRKey = activeProjectId === "proj_default" ? "hb_risks" : `hb_project_${activeProjectId}_risks`;
+
+    localStorage.setItem(currentProjKey, JSON.stringify(project));
+    localStorage.setItem(currentPhKey, JSON.stringify(phases));
+    localStorage.setItem(currentTKey, JSON.stringify(tasks));
+    localStorage.setItem(currentMKey, JSON.stringify(milestones));
+    localStorage.setItem(currentRKey, JSON.stringify(risks));
+
+    // 2. 신규 로딩할 대상 프로젝트 탐색 및 스토리지 키 매칭
+    const nextProjKey = pId === "proj_default" ? "hb_project" : `hb_project_${pId}`;
+    const nextPhKey = pId === "proj_default" ? "hb_phases" : `hb_project_${pId}_phases`;
+    const nextTKey = pId === "proj_default" ? "hb_tasks" : `hb_project_${pId}_tasks`;
+    const nextMKey = pId === "proj_default" ? "hb_milestones" : `hb_project_${pId}_milestones`;
+    const nextRKey = pId === "proj_default" ? "hb_risks" : `hb_project_${pId}_risks`;
+
+    const savedProject = localStorage.getItem(nextProjKey);
+    const savedPhases = localStorage.getItem(nextPhKey);
+    const savedTasks = localStorage.getItem(nextTKey);
+    const savedMilestones = localStorage.getItem(nextMKey);
+    const savedRisks = localStorage.getItem(nextRKey);
+
+    localStorage.setItem("hb_active_project_id", pId);
+    setActiveProjectId(pId);
+
+    const info = projects.find(p => p.id === pId) || { id: pId, title: "새 프로젝트", pm: "담당PM", startDate: "2026-06-01", endDate: "2026-12-31" };
+    setProject(savedProject ? JSON.parse(savedProject) : { ...info });
+    setPhases(savedPhases ? JSON.parse(savedPhases) : (pId === "proj_default" ? defaultPhases : [
+      { id: `${pId}_p1`, name: "기획 및 요구사항 구체화", color: "indigo" },
+      { id: `${pId}_p2`, name: "시스템 아키텍처 및 설계", color: "emerald" },
+      { id: `${pId}_p3`, name: "개발 및 QA (알파/베타)", color: "purple" }
+    ]));
+    setTasks(savedTasks ? JSON.parse(savedTasks) : (pId === "proj_default" ? defaultTasks : []));
+    setMilestones(savedMilestones ? JSON.parse(savedMilestones) : (pId === "proj_default" ? defaultMilestones : []));
+    setRisks(savedRisks ? JSON.parse(savedRisks) : (pId === "proj_default" ? defaultRisks : []));
+
+    // 프로젝트 선택 후 4가지 상세 목차(Dashboard)로 페이지 전환 진입
+    setActiveTab("dashboard");
+    showToast(`📁 ${info.title} 프로젝트 마스터플랜으로 진입하였습니다.`);
+  };
+
+  const handleCreateProject = (title: string, pm: string, startDate: string, endDate: string) => {
+    if (!title || !startDate || !endDate) {
+      showToast("⚠️ 필수 요소를 모두 정확하게 기입해주세요.");
+      return;
+    }
+    const newId = `proj_${Date.now()}`;
+    const newProj: ProjectInfo = { id: newId, title, pm: pm || "담당 PM", startDate, endDate };
+    
+    const updatedList = [...projects, newProj];
+    setProjects(updatedList);
+    localStorage.setItem("hb_projects_list", JSON.stringify(updatedList));
+
+    // 전환
+    selectProject(newId);
+    showToast("✨ 새로운 스펙의 프로젝트가 생성 및 활성화되었습니다.");
+  };
+
+  const handleDeleteProject = (pId: string) => {
+    if (projects.length <= 1) {
+      showToast("⚠️ 최소 한 개 이상의 메인 프로젝트가 존재해야 하므로 삭제할 수 없습니다.");
+      return;
+    }
+
+    const targetProj = projects.find(p => p.id === pId);
+    if (!targetProj) return;
+
+    // 프로젝트 삭제 데이터 보존용 백업 레코드 바인더 생성
+    const pKey = pId === "proj_default" ? "hb_project" : `hb_project_${pId}`;
+    const phKey = pId === "proj_default" ? "hb_phases" : `hb_project_${pId}_phases`;
+    const tKey = pId === "proj_default" ? "hb_tasks" : `hb_project_${pId}_tasks`;
+    const mKey = pId === "proj_default" ? "hb_milestones" : `hb_project_${pId}_milestones`;
+    const rKey = pId === "proj_default" ? "hb_risks" : `hb_project_${pId}_risks`;
+
+    let projInfoObj = targetProj;
+    let phasesObj = defaultPhases;
+    let tasksObj = defaultTasks;
+    let milestonesObj = defaultMilestones;
+    let risksObj = defaultRisks;
+
+    if (activeProjectId === pId) {
+      projInfoObj = { ...project };
+      phasesObj = [...phases];
+      tasksObj = [...tasks];
+      milestonesObj = [...milestones];
+      risksObj = [...risks];
+    } else {
+      try {
+        const savedPObj = localStorage.getItem(pKey);
+        if (savedPObj) projInfoObj = JSON.parse(savedPObj);
+      } catch (e) {}
+
+      try {
+        const savedPhObj = localStorage.getItem(phKey);
+        if (savedPhObj) phasesObj = JSON.parse(savedPhObj);
+        else if (pId !== "proj_default") phasesObj = [
+          { id: `${pId}_p1`, name: "기획 및 요구사항 구체화", color: "indigo" },
+          { id: `${pId}_p2`, name: "시스템 아키텍처 및 설계", color: "emerald" },
+          { id: `${pId}_p3`, name: "개발 및 QA (알파/베타)", color: "purple" }
+        ];
+      } catch (e) {}
+
+      try {
+        const savedTObj = localStorage.getItem(tKey);
+        if (savedTObj) tasksObj = JSON.parse(savedTObj);
+        else if (pId !== "proj_default") tasksObj = [];
+      } catch (e) {}
+
+      try {
+        const savedMObj = localStorage.getItem(mKey);
+        if (savedMObj) milestonesObj = JSON.parse(savedMObj);
+        else if (pId !== "proj_default") milestonesObj = [];
+      } catch (e) {}
+
+      try {
+        const savedRObj = localStorage.getItem(rKey);
+        if (savedRObj) risksObj = JSON.parse(savedRObj);
+        else if (pId !== "proj_default") risksObj = [];
+      } catch (e) {}
+    }
+
+    const trashItem = {
+      id: pId,
+      projectInfo: projInfoObj,
+      phases: phasesObj,
+      tasks: tasksObj,
+      milestones: milestonesObj,
+      risks: risksObj,
+      deletedAt: new Date().toISOString()
+    };
+
+    // 휴지통 전입
+    const updatedTrash = [trashItem, ...trashProjects];
+    setTrashProjects(updatedTrash);
+    localStorage.setItem("hb_projects_trash", JSON.stringify(updatedTrash));
+
+    const filtered = projects.filter(p => p.id !== pId);
+    setProjects(filtered);
+    localStorage.setItem("hb_projects_list", JSON.stringify(filtered));
+
+    // 개별 데이터 파괴
+    localStorage.removeItem(pKey);
+    localStorage.removeItem(phKey);
+    localStorage.removeItem(tKey);
+    localStorage.removeItem(mKey);
+    localStorage.removeItem(rKey);
+
+    // 활성중인 기안을 지운 경우
+    if (activeProjectId === pId) {
+      const nextActiveId = filtered[0].id || "proj_default";
+      localStorage.setItem("hb_active_project_id", nextActiveId);
+      setActiveProjectId(nextActiveId);
+
+      const nextKey = nextActiveId === "proj_default" ? "hb_project" : `hb_project_${nextActiveId}`;
+      const nextPhKey = nextActiveId === "proj_default" ? "hb_phases" : `hb_project_${nextActiveId}_phases`;
+      const nextTKey = nextActiveId === "proj_default" ? "hb_tasks" : `hb_project_${nextActiveId}_tasks`;
+      const nextMKey = nextActiveId === "proj_default" ? "hb_milestones" : `hb_project_${nextActiveId}_milestones`;
+      const nextRKey = nextActiveId === "proj_default" ? "hb_risks" : `hb_project_${nextActiveId}_risks`;
+
+      const savedProject = localStorage.getItem(nextKey);
+      const savedPhases = localStorage.getItem(nextPhKey);
+      const savedTasks = localStorage.getItem(nextTKey);
+      const savedMilestones = localStorage.getItem(nextMKey);
+      const savedRisks = localStorage.getItem(nextRKey);
+
+      const nextInfo = filtered[0];
+      setProject(savedProject ? JSON.parse(savedProject) : { ...nextInfo });
+      setPhases(savedPhases ? JSON.parse(savedPhases) : (nextActiveId === "proj_default" ? defaultPhases : [
+        { id: `${nextActiveId}_p1`, name: "기획 및 요구사항 구체화", color: "indigo" },
+        { id: `${nextActiveId}_p2`, name: "시스템 아키텍처 및 설계", color: "emerald" },
+        { id: `${nextActiveId}_p3`, name: "개발 및 QA (알파/베타)", color: "purple" }
+      ]));
+      setTasks(savedTasks ? JSON.parse(savedTasks) : (nextActiveId === "proj_default" ? defaultTasks : []));
+      setMilestones(savedMilestones ? JSON.parse(savedMilestones) : (nextActiveId === "proj_default" ? defaultMilestones : []));
+      setRisks(savedRisks ? JSON.parse(savedRisks) : (nextActiveId === "proj_default" ? defaultRisks : []));
+    }
+
+    showToast(`🗑️ '${targetProj.title}' 프로젝트가 휴지통으로 이동되었습니다.`);
+  };
+
+  const handleRestoreProject = (pId: string) => {
+    const targetTrashItem = trashProjects.find(item => item.id === pId);
+    if (!targetTrashItem) {
+      showToast("⚠️ 휴지통에서 대상을 탐색할 수 없습니다.");
+      return;
+    }
+
+    // projects 리스토어 복구
+    const restoredProj = targetTrashItem.projectInfo;
+    const updatedList = [...projects, restoredProj];
+    setProjects(updatedList);
+    localStorage.setItem("hb_projects_list", JSON.stringify(updatedList));
+
+    // 세부 연계 데이터 완벽 복원
+    const pKey = pId === "proj_default" ? "hb_project" : `hb_project_${pId}`;
+    const phKey = pId === "proj_default" ? "hb_phases" : `hb_project_${pId}_phases`;
+    const tKey = pId === "proj_default" ? "hb_tasks" : `hb_project_${pId}_tasks`;
+    const mKey = pId === "proj_default" ? "hb_milestones" : `hb_project_${pId}_milestones`;
+    const rKey = pId === "proj_default" ? "hb_risks" : `hb_project_${pId}_risks`;
+
+    localStorage.setItem(pKey, JSON.stringify(targetTrashItem.projectInfo));
+    localStorage.setItem(phKey, JSON.stringify(targetTrashItem.phases));
+    localStorage.setItem(tKey, JSON.stringify(targetTrashItem.tasks));
+    localStorage.setItem(mKey, JSON.stringify(targetTrashItem.milestones));
+    localStorage.setItem(rKey, JSON.stringify(targetTrashItem.risks));
+
+    // 휴지통에서 소멸
+    const updatedTrash = trashProjects.filter(item => item.id !== pId);
+    setTrashProjects(updatedTrash);
+    localStorage.setItem("hb_projects_trash", JSON.stringify(updatedTrash));
+
+    showToast(`✨ '${restoredProj.title}' 프로젝트와 세부 기획·위험 리스트가 완벽히 제자리로 복구되었습니다!`);
+  };
+
+  const handlePermanentDelete = (pId: string) => {
+    const targetTrashItem = trashProjects.find(item => item.id === pId);
+    const title = targetTrashItem ? targetTrashItem.projectInfo.title : "선택된 프로젝트";
+    
+    if (confirm(`🚨 [영구 삭제 경고]\n'${title}' 프로젝트를 휴지통에서 영구히 삭제하시겠습니까?\n이 작업은 취소할 수 없으며 연결된 세부 일정 데이터는 물리적으로 완전히 소멸합니다.`)) {
+      const updatedTrash = trashProjects.filter(item => item.id !== pId);
+      setTrashProjects(updatedTrash);
+      localStorage.setItem("hb_projects_trash", JSON.stringify(updatedTrash));
+      showToast("💥 프로젝트가 영구적으로 파기 및 소멸되었습니다.");
+    }
+  };
+
+  // 프로젝트별 요약 실시간 캘큘레이터
+  const getProjectStats = (pId: string) => {
+    const phKey = pId === "proj_default" ? "hb_phases" : `hb_project_${pId}_phases`;
+    const tKey = pId === "proj_default" ? "hb_tasks" : `hb_project_${pId}_tasks`;
+    const mKey = pId === "proj_default" ? "hb_milestones" : `hb_project_${pId}_milestones`;
+    const rKey = pId === "proj_default" ? "hb_risks" : `hb_project_${pId}_risks`;
+
+    let phCount = 0;
+    let tCount = 0;
+    let mCount = 0;
+    let rCount = 0;
+
+    try {
+      const rawPh = localStorage.getItem(phKey);
+      phCount = rawPh ? JSON.parse(rawPh).length : (pId === "proj_default" ? defaultPhases.length : 3);
+    } catch (e) {}
+
+    try {
+      const rawT = localStorage.getItem(tKey);
+      tCount = rawT ? JSON.parse(rawT).length : (pId === "proj_default" ? defaultTasks.length : 0);
+    } catch (e) {}
+
+    try {
+      const rawM = localStorage.getItem(mKey);
+      mCount = rawM ? JSON.parse(rawM).length : (pId === "proj_default" ? defaultMilestones.length : 0);
+    } catch (e) {}
+
+    try {
+      const rawR = localStorage.getItem(rKey);
+      rCount = rawR ? JSON.parse(rawR).length : (pId === "proj_default" ? defaultRisks.length : 0);
+    } catch (e) {}
+
+    return { phCount, tCount, mCount, rCount };
   };
 
   // --- CRUD 핸들러 정의 (순수 React 리액티브 반영) ---
@@ -443,18 +833,47 @@ export default function App() {
   };
 
   // --- 헬퍼 리소스: 칼라 뱃지 맵핑 ---
+  const PHASE_COLORS = [
+    { id: "indigo", name: "인디고 블루", bgClass: "bg-indigo-500", line: "bg-indigo-600", bar: "bg-indigo-500", text: "text-indigo-600", bgHex: "#6366f1" },
+    { id: "blue", name: "클래식 블루", bgClass: "bg-blue-500", line: "bg-blue-600", bar: "bg-blue-500", text: "text-blue-600", bgHex: "#3b82f6" },
+    { id: "sky", name: "스카이 블루", bgClass: "bg-sky-500", line: "bg-sky-600", bar: "bg-sky-500", text: "text-sky-600", bgHex: "#0ea5e9" },
+    { id: "cyan", name: "시안 블루", bgClass: "bg-cyan-500", line: "bg-cyan-600", bar: "bg-cyan-500", text: "text-cyan-600", bgHex: "#06b6d4" },
+    { id: "teal", name: "스페이스 틸", bgClass: "bg-teal-500", line: "bg-teal-600", bar: "bg-teal-500", text: "text-teal-600", bgHex: "#0d9488" },
+    { id: "emerald", name: "에메랄드 그린", bgClass: "bg-emerald-500", line: "bg-emerald-600", bar: "bg-emerald-500", text: "text-emerald-600", bgHex: "#10b981" },
+    { id: "green", name: "포레스트 그린", bgClass: "bg-green-500", line: "bg-green-600", bar: "bg-green-500", text: "text-green-600", bgHex: "#22c55e" },
+    { id: "lime", name: "라임 그린", bgClass: "bg-lime-500", line: "bg-lime-600", bar: "bg-lime-500", text: "text-lime-600", bgHex: "#84cc16" },
+    { id: "yellow", name: "썬플라워 옐로우", bgClass: "bg-yellow-400", line: "bg-yellow-500", bar: "bg-yellow-400", text: "text-yellow-600", bgHex: "#eab308" },
+    { id: "amber", name: "스프링 앰버", bgClass: "bg-amber-500", line: "bg-amber-600", bar: "bg-amber-500", text: "text-amber-600", bgHex: "#f59e0b" },
+    { id: "orange", name: "피치 오렌지", bgClass: "bg-orange-500", line: "bg-orange-600", bar: "bg-orange-500", text: "text-orange-600", bgHex: "#f97316" },
+    { id: "red", name: "애플 레드", bgClass: "bg-red-500", line: "bg-red-600", bar: "bg-red-500", text: "text-red-600", bgHex: "#ef4444" },
+    { id: "coral", name: "코랄 핑크", bgClass: "bg-orange-400", line: "bg-orange-500", bar: "bg-orange-400", text: "text-orange-500", bgHex: "#fb923c" },
+    { id: "crimson", name: "크림슨 레드", bgClass: "bg-red-600", line: "bg-red-700", bar: "bg-red-600", text: "text-red-700", bgHex: "#be123c" },
+    { id: "rose", name: "클래식 로즈", bgClass: "bg-rose-500", line: "bg-rose-600", bar: "bg-rose-500", text: "text-rose-600", bgHex: "#f43f5e" },
+    { id: "pink", name: "베리 핑크", bgClass: "bg-pink-500", line: "bg-pink-600", bar: "bg-pink-500", text: "text-pink-600", bgHex: "#ec4899" },
+    { id: "fuchsia", name: "네온 푸시아", bgClass: "bg-fuchsia-500", line: "bg-fuchsia-600", bar: "bg-fuchsia-500", text: "text-fuchsia-600", bgHex: "#d946ef" },
+    { id: "purple", name: "네온 퍼플", bgClass: "bg-purple-500", line: "bg-purple-600", bar: "bg-purple-500", text: "text-purple-600", bgHex: "#a855f7" },
+    { id: "violet", name: "디프 바이올렛", bgClass: "bg-violet-500", line: "bg-violet-600", bar: "bg-violet-500", text: "text-violet-600", bgHex: "#8b5cf6" },
+    { id: "lavender", name: "라벤더", bgClass: "bg-violet-300", line: "bg-violet-400", bar: "bg-violet-300", text: "text-violet-500", bgHex: "#a78bfa" },
+    { id: "plum", name: "딥 플럼", bgClass: "bg-fuchsia-700", line: "bg-fuchsia-800", bar: "bg-fuchsia-700", text: "text-fuchsia-800", bgHex: "#86198f" },
+    { id: "peach", name: "크림 피치", bgClass: "bg-amber-300", line: "bg-amber-400", bar: "bg-amber-300", text: "text-amber-500", bgHex: "#fcd34d" },
+    { id: "olive", name: "카키 올리브", bgClass: "bg-lime-700", line: "bg-lime-800", bar: "bg-lime-700", text: "text-lime-800", bgHex: "#3f6212" },
+    { id: "mint", name: "리프 민트", bgClass: "bg-emerald-300", line: "bg-emerald-400", bar: "bg-emerald-300", text: "text-emerald-500", bgHex: "#34d399" },
+    { id: "navy", name: "디프 네이비", bgClass: "bg-slate-800", line: "bg-slate-900", bar: "bg-slate-800", text: "text-slate-900", bgHex: "#0f172a" },
+    { id: "slate", name: "스틸 슬레이트", bgClass: "bg-slate-500", line: "bg-slate-600", bar: "bg-slate-500", text: "text-slate-600", bgHex: "#64748b" },
+    { id: "zinc", name: "쿨 그레이", bgClass: "bg-zinc-500", line: "bg-zinc-600", bar: "bg-zinc-500", text: "text-zinc-600", bgHex: "#71717a" },
+    { id: "neutral", name: "뉴트럴 그레이", bgClass: "bg-neutral-500", line: "bg-neutral-600", bar: "bg-neutral-500", text: "text-neutral-600", bgHex: "#737373" },
+    { id: "stone", name: "웜 스톤", bgClass: "bg-stone-500", line: "bg-stone-600", bar: "bg-stone-500", text: "text-stone-600", bgHex: "#78716c" },
+    { id: "gold", name: "앤티크 골드", bgClass: "bg-yellow-500", line: "bg-yellow-600", bar: "bg-yellow-500", text: "text-yellow-600", bgHex: "#ca8a04" }
+  ];
+
   const getPhaseColorMap = (colorName: string) => {
-    switch (colorName) {
-      case "indigo": return { line: "bg-indigo-600", bar: "bg-indigo-500", text: "text-indigo-600" };
-      case "emerald": return { line: "bg-emerald-600", bar: "bg-emerald-500", text: "text-emerald-600" };
-      case "amber": return { line: "bg-amber-600", bar: "bg-amber-500", text: "text-amber-600" };
-      case "rose": return { line: "bg-rose-600", bar: "bg-rose-500", text: "text-rose-600" };
-      case "purple": return { line: "bg-purple-600", bar: "bg-purple-500", text: "text-purple-600" };
-      default: return { line: "bg-indigo-600", bar: "bg-indigo-500", text: "text-indigo-600" };
+    const found = PHASE_COLORS.find(c => c.id === colorName);
+    if (found) {
+      return { line: found.line, bar: found.bar, text: found.text };
     }
+    return { line: "bg-indigo-600", bar: "bg-indigo-500", text: "text-indigo-600" };
   };
 
-  // 대시보드 내비게이션 활성화 클래스 매퍼
   const getNavClass = (tabId: typeof activeTab) => {
     const base = "w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer border ";
     if (activeTab === tabId) {
@@ -465,6 +884,322 @@ export default function App() {
 
   const projectHealth = calcProjectHealth();
 
+  if (activeTab === "projects") {
+    return (
+      <div className="h-screen w-full flex flex-col bg-slate-50 overflow-hidden font-sans antialiased">
+        {/* 상단 통합 마스터 헤더 바 */}
+        <header className="bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center flex-shrink-0 shadow-sm z-10">
+          <div className="flex items-center space-x-4">
+            <div className="bg-gradient-to-tr from-indigo-600 to-indigo-400 p-2.5 rounded-xl text-white shadow-lg shadow-indigo-500/20">
+              <HeartPulse className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <h1 className="font-extrabold text-xl tracking-tight text-slate-900 animate-pulse">HealthBoard</h1>
+              <p className="text-[10px] text-indigo-600 font-bold tracking-widest uppercase">Risk-Driven Portfolio Management System</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+              <span>기준시점: {todayStr}</span>
+            </span>
+          </div>
+        </header>
+
+        {/* 메인 스크롤 콘텐츠 구역 */}
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          <div className="max-w-7xl mx-auto space-y-8 animate-fadeIn">
+            
+            {/* 상단 소개 배너 */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                <FolderPlus className="w-48 h-48" />
+              </div>
+              <div className="relative z-10 max-w-3xl">
+                <span className="bg-indigo-500/30 text-indigo-300 border border-indigo-400/20 px-3 py-0.5 rounded-full text-[10px] font-bold tracking-widest uppercase mb-4 inline-block">
+                  Project Portfolio Control Center
+                </span>
+                <h3 className="text-2xl md:text-3xl font-extrabold tracking-tight mt-1">
+                  프로젝트 포트폴리오 통합 제어반
+                </h3>
+                <p className="text-slate-300 text-sm leading-relaxed mt-2.5">
+                  조직 내부에서 추진하는 모든 프로젝트들의 수명주기 스펙과 일정을 개별적으로 보존하고 세부 계획을 전환 및 제어합니다. 아래 가용 프로젝트 목록에서 <strong>[상세 계획 관리 진입]</strong> 버튼을 클릭하여 구축 단계(Phases), 세부 작업(Tasks), 주요 이정표(Milestones), 리스크 정보를 실시간으로 관리하는 4가지 핵심 목차 화면으로 진입할 수 있습니다.
+                </p>
+              </div>
+            </div>
+
+            {/* 개설 폼 & 리바 그리드 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              
+              {/* 왼쪽: 새로운 프로젝트 개설 카드 */}
+              <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between h-fit">
+                <div>
+                  <div className="flex items-center space-x-2.5 pb-4 border-b border-slate-100 mb-6 font-semibold">
+                    <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+                      <FolderPlus className="w-5 h-5" />
+                    </div>
+                    <h4 className="font-bold text-slate-900 text-sm">새로운 프로젝트 신규 개설</h4>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1.5">프로젝트 명칭 <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={newProjTitle}
+                        onChange={(e) => setNewProjTitle(e.target.value)}
+                        placeholder="예: 차세대 빌링 시스템 아키텍처 수립"
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1.5">총괄 책임PM</label>
+                      <input
+                        type="text"
+                        value={newProjPm}
+                        onChange={(e) => setNewProjPm(e.target.value)}
+                        placeholder="예: 홍길동 PM"
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1.5">시작 기점일 <span className="text-red-500">*</span></label>
+                        <input
+                          type="date"
+                          value={newProjStartDate}
+                          onChange={(e) => setNewProjStartDate(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-semibold text-slate-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1.5">종료 목표일 <span className="text-red-500">*</span></label>
+                        <input
+                          type="date"
+                          value={newProjEndDate}
+                          onChange={(e) => setNewProjEndDate(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-semibold text-slate-700"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (!newProjTitle) {
+                      showToast("⚠️ 프로젝트 명칭을 상세하게 입력해주세요.");
+                      return;
+                    }
+                    handleCreateProject(newProjTitle, newProjPm, newProjStartDate, newProjEndDate);
+                    setNewProjTitle("");
+                    setNewProjPm("");
+                  }}
+                  className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white py-3 rounded-xl text-xs font-bold tracking-wide transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center justify-center gap-2 font-semibold"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>새로운 프로젝트 마스터 개설</span>
+                </button>
+              </div>
+
+              {/* 오른쪽: 가용 프로젝트 전체 리스트 */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                  <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                     <span>가용 가동 프로젝트</span>
+                     <span className="bg-slate-200 text-slate-700 text-xs px-2.5 py-0.5 rounded-full font-extrabold">{projects.length}</span>
+                  </h4>
+                  <span className="text-xs font-medium text-slate-400">등록된 최적 일정 로드 또는 파기가 가능합니다.</span>
+                </div>
+
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 pad-y-1 custom-scrollbar">
+                  {projects.map((proj) => {
+                    const isActive = (proj.id || "proj_default") === activeProjectId;
+                    const stats = getProjectStats(proj.id || "proj_default");
+
+                    return (
+                      <div
+                        key={proj.id || "proj_default"}
+                        className={`p-6 rounded-2xl border transition-all duration-300 bg-white relative overflow-hidden ${
+                          isActive
+                            ? "border-indigo-400 shadow-md ring-2 ring-indigo-50"
+                            : "border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md"
+                        }`}
+                      >
+                        {isActive && (
+                          <div className="absolute top-0 right-0">
+                            <span className="bg-gradient-to-l from-indigo-600 to-indigo-500 text-white font-extrabold text-[10px] uppercase tracking-wider py-1.5 px-4 rounded-bl-xl shadow-sm flex items-center gap-1">
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              <span>직전 가동 (Active)</span>
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
+                          <div className="space-y-2 max-w-lg">
+                            <div className="flex items-center gap-2">
+                              {isActive && <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-ping" />}
+                              <h5 className="font-extrabold text-slate-900 text-base leading-snug break-all">
+                                {proj.title}
+                              </h5>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-y-2 gap-x-3 text-xs text-slate-500 font-semibold mt-1">
+                              <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <User className="w-3.5 h-3.5 text-slate-400" />
+                                PM: {proj.pm || "미지정"}
+                              </span>
+                              <span className="text-slate-300">|</span>
+                              <span className="flex items-center gap-1 bg-slate-50 text-slate-600 px-2.5 py-0.5 rounded-md font-medium">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                {proj.startDate} ~ {proj.endDate}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
+                            <button
+                              onClick={() => selectProject(proj.id || "proj_default")}
+                              className="px-4 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.01] inline-flex items-center gap-1.5"
+                            >
+                              <Zap className="w-3.5 h-3.5" />
+                              <span>상세 계획 관리 진입 →</span>
+                            </button>
+
+                            {/* 삭제 버튼 - 휴지통 전직 */}
+                            <button
+                              onClick={() => {
+                                if (confirm(`🚨 [프로젝트 삭제 확인]\n정말 '${proj.title}' 프로젝트를 삭제하시겠습니까?\n\n삭제된 프로젝트와 세부 기획 일정, 마일스톤, 위험 레지스터 정보는 아래 '보관 폴더 휴지통' 구역으로 전송되어 언제든지 손실 없이 완벽 복구하실 수 있습니다.`)) {
+                                  handleDeleteProject(proj.id || "proj_default");
+                                }
+                              }}
+                              disabled={projects.length <= 1}
+                              className={`p-2.5 rounded-xl text-xs font-bold transition-all border shadow-sm inline-flex items-center justify-center ${
+                                projects.length <= 1
+                                  ? "bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed"
+                                  : "bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 border-slate-200 cursor-pointer"
+                              }`}
+                              title={projects.length <= 1 ? "최소 하나의 프로젝트 가동이 필요하여 삭제할 수 없습니다" : "프로젝트를 임시 삭제 후 휴지통에 보관"}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 하단 요약 메트릭 컴포넌트 */}
+                        <div className="grid grid-cols-4 gap-3 mt-5 bg-slate-50/70 p-4 rounded-xl border border-slate-100/80">
+                          <div>
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">프로젝트 순기</span>
+                            <span className="text-xs font-extrabold text-slate-600">{stats.phCount}개 단계</span>
+                          </div>
+                          <div className="border-l border-slate-200/60 pl-3">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">세부 테스크</span>
+                            <span className="text-sm font-extrabold text-indigo-600">{stats.tCount}개 작업</span>
+                          </div>
+                          <div className="border-l border-slate-200/60 pl-3">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">마일스톤</span>
+                            <span className="text-sm font-extrabold text-emerald-600">{stats.mCount}개 수립</span>
+                          </div>
+                          <div className="border-l border-slate-200/60 pl-3">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">위험 관리</span>
+                            <span className="text-sm font-extrabold text-amber-600">{stats.rCount}건 포착</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+
+            {/* 하단 섹션: ♻️ 프로젝트 영구 보관용 휴지통 */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+              <div className="flex justify-between items-center pb-4 border-b border-slate-100 mb-6">
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 bg-rose-50 rounded-xl text-rose-500">
+                    <Trash2 className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-800 text-sm">보관 폴더 휴지통 (Recycle Bin)</h4>
+                    <p className="text-[11px] text-slate-400 font-semibold">실수로 지웠거나 만료된 프로젝트를 안전하게 격리 보관하고, 원클릭으로 모든 리액티브 일정 데이터를 복구합니다.</p>
+                  </div>
+                </div>
+                <span className="bg-rose-50 text-rose-600 text-xs px-3 py-1 rounded-full font-extrabold">
+                  보관 수량: {trashProjects.length}개
+                </span>
+              </div>
+
+              {trashProjects.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 flex flex-col items-center justify-center">
+                  <span className="text-3xl mb-2">♻️</span>
+                  <p className="text-sm font-semibold text-slate-500">현재 휴지통에 보존된 유실 데이터가 없습니다.</p>
+                  <p className="text-xs text-slate-400 mt-1">삭제버튼을 눌러 정리한 대안 프로젝트가 이곳에 자원 소출 상태 그대로 보호 보관됩니다.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {trashProjects.map((item) => (
+                    <div key={item.id} className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/60 flex flex-col justify-between hover:bg-slate-50 transition-all">
+                      <div>
+                        <div className="flex justify-between items-start gap-4">
+                          <h5 className="font-bold text-slate-800 text-sm line-clamp-1">{item.projectInfo.title}</h5>
+                          <span className="text-[10px] text-rose-500 font-semibold bg-rose-50 px-2 py-0.5 rounded-md flex-shrink-0">
+                            {new Date(item.deletedAt).toLocaleString("ko-KR", { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 지움
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-4 mt-2 text-xs text-slate-400 font-medium">
+                          <span>PM: <strong>{item.projectInfo.pm || "미지정"}</strong></span>
+                          <span>|</span>
+                          <span>일정: {item.projectInfo.startDate} ~ {item.projectInfo.endDate}</span>
+                        </div>
+                        <div className="mt-3 text-[11px] text-slate-500 font-semibold bg-white p-2.5 rounded-lg border border-slate-100 flex items-center justify-between">
+                          <span>단계: <strong className="text-indigo-600">{item.phases?.length || 0}개</strong></span>
+                          <span>태스크: <strong className="text-purple-600">{item.tasks?.length || 0}개</strong></span>
+                          <span>마일스톤: <strong className="text-emerald-600">{item.milestones?.length || 0}개</strong></span>
+                          <span>리스크: <strong className="text-amber-600">{item.risks?.length || 0}개</strong></span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end space-x-2 mt-4 pt-3 border-t border-slate-200/50">
+                        <button
+                          onClick={() => handleRestoreProject(item.id)}
+                          className="px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>선택 복구하기</span>
+                        </button>
+                        <button
+                          onClick={() => handlePermanentDelete(item.id)}
+                          className="px-3 py-1.5 bg-white text-rose-500 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded-lg text-xs font-bold border border-rose-100 transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>영구 삭제</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+
+        {/* 토스트 및 모달 보정 렌더 */}
+        <div className="absolute">
+          {toast.show && (
+            <div className="fixed bottom-6 right-6 bg-slate-900 border border-slate-800 text-white px-5 py-3.5 rounded-2xl shadow-2xl z-50 flex items-center space-x-3 text-xs font-bold animate-slideUp">
+              <span className="text-indigo-400 text-sm">💡</span>
+              <span className="tracking-wide">{toast.msg}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Otherwise, render internal project details workspaces (4 tabs)
   return (
     <div className="h-screen w-full flex overflow-hidden bg-white text-slate-800 font-sans antialiased">
       
@@ -475,13 +1210,25 @@ export default function App() {
             <HeartPulse className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h1 className="font-bold text-lg tracking-tight text-slate-900">HealthBoard</h1>
+            <h1 className="font-bold text-lg tracking-tight text-slate-900 font-extrabold">HealthBoard</h1>
             <p className="text-[10px] text-indigo-600 font-semibold tracking-widest uppercase">Risk-Driven Planner</p>
           </div>
         </div>
 
         {/* 내비게이션 바 */}
         <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
+          {/* 포트폴리오 메인 복귀 버튼 */}
+          <button
+            onClick={() => {
+              setActiveTab("projects");
+              showToast("📂 프로젝트 선택 및 포트폴리오 메인으로 복귀했습니다.");
+            }}
+            className="w-full flex items-center justify-center space-x-2 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 py-3.5 px-4 rounded-xl text-xs font-extrabold transition-all mb-4 border border-slate-200/80 hover:border-indigo-100 shadow-sm cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>← 포트폴리오 선택 복귀</span>
+          </button>
+
           <button onClick={() => setActiveTab("dashboard")} className={getNavClass("dashboard")}>
             <ChartPie className="w-5 h-5" />
             <span>종합 진단 요약</span>
@@ -504,7 +1251,7 @@ export default function App() {
         <div className="p-5 bg-slate-50 border-t border-slate-200/60">
           <button
             onClick={handleExportWeeklyReport}
-            className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-slate-50 active:scale-95 text-slate-700 py-3 rounded-xl text-xs font-bold transition-all border border-slate-200 cursor-pointer shadow-sm"
+            className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-slate-50 active:scale-95 text-slate-700 py-3 rounded-xl text-xs font-bold transition-all border border-slate-200 cursor-pointer shadow-sm font-semibold"
           >
             <FileText className="w-4 h-4 text-emerald-400" />
             <span>주간 Markdown 보고서 복사</span>
@@ -536,17 +1283,17 @@ export default function App() {
                 </button>
               </div>
               <div className="flex items-center space-x-4 mt-2">
-                <span className="text-xs font-medium text-slate-500 flex items-center">
+                <span className="text-xs font-semibold text-slate-500 flex items-center">
                   <Calendar className="w-4 h-4 mr-1.5 text-slate-400" />
                   목표일: <strong className="ml-1 text-slate-700">{project.endDate}</strong>
                 </span>
                 <span className="text-slate-300">|</span>
-                <span className="text-xs font-medium text-slate-500 flex items-center">
+                <span className="text-xs font-semibold text-slate-500 flex items-center">
                   <User className="w-4 h-4 mr-1.5 text-slate-400" />
                   PM: <strong className="ml-1 text-slate-700">{project.pm}</strong>
                 </span>
                 <span className="text-slate-300">|</span>
-                <span className="text-xs font-medium text-slate-500 flex items-center">
+                <span className="text-xs font-semibold text-slate-500 flex items-center">
                   <Sparkles className="w-4 h-4 mr-1.5 text-indigo-500" />
                   기준시점: <strong className="ml-1 text-indigo-600">2026-05-28</strong>
                 </span>
@@ -591,7 +1338,7 @@ export default function App() {
         </header>
 
         {/* 탭 가변 뷰 스페이스 */}
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar font-sans">
           
           {/* ================= 탭 1: 종합 진단 요약 (대시보드) ================= */}
           {activeTab === "dashboard" && (
@@ -805,7 +1552,19 @@ export default function App() {
                     <strong> 리스트의 항목명을 클릭하면 디테일 추가/수정과 데이터 제어가 가능합니다.</strong>
                   </p>
                 </div>
-                <div className="flex shrink-0 space-x-3">
+                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                  {/* 간트 차트 마일스톤 토글 옵션 */}
+                  <label className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100/50 transition-all cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showMilestonesOnGantt}
+                      onChange={(e) => setShowMilestonesOnGantt(e.target.checked)}
+                      className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <Flag className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <span>마일스톤 동시 표시</span>
+                  </label>
+
                   <button
                     onClick={handleOpenAddPhase}
                     className="p-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 hover:text-indigo-600 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
@@ -873,7 +1632,7 @@ export default function App() {
 
                           {/* Task Child Component List */}
                           {phaseTasks.map(task => (
-                            <div key={task.id} className="pl-8 pr-4 py-3 bg-slate-50/20 hover:bg-slate-50/70 flex justify-between items-center border-b border-slate-100/60 group transition-all">
+                            <div key={task.id} className="pl-8 pr-4 h-[68px] bg-slate-50/20 hover:bg-slate-50/70 flex justify-between items-center border-b border-slate-100/60 group transition-all">
                               <div className="min-w-0 pr-3 flex-1">
                                 <p
                                   onClick={() => handleEditTask(task)}
@@ -928,13 +1687,82 @@ export default function App() {
 
                 {/* 우측 연계: 타임라인 그리드 (가로스크롤 대응) */}
                 <div className="flex-1 overflow-x-auto bg-white relative custom-scrollbar max-h-[650px]">
-                  <div className="min-w-[800px] flex flex-col h-full">
+                  <div className="min-w-[800px] flex flex-col h-full relative">
                     
+                    {/* 마일스톤 오버레이 시각화 가이드라인 */}
+                    {(() => {
+                      if (!showMilestonesOnGantt) return null;
+
+                      const projStart = new Date(project.startDate).getTime();
+                      const projEnd = new Date(project.endDate).getTime();
+                      const totalSpan = projEnd - projStart;
+
+                      const positionedMilestones = milestones.map(m => {
+                        const milestoneTime = new Date(m.targetDate).getTime();
+                        let leftPercent = totalSpan > 0 ? ((milestoneTime - projStart) / totalSpan) * 100 : 0;
+                        if (leftPercent < 0) leftPercent = 0;
+                        if (leftPercent > 100) leftPercent = 100;
+                        return { ...m, leftPercent };
+                      }).sort((a, b) => a.leftPercent - b.leftPercent);
+
+                      // 가로 겹침 방지 (스태거링) 레벨 연산
+                      const levels: number[] = [];
+                      const minSpacing = 12; // 겹침 판정 기준 간격 (12%)
+
+                      const milestonesWithLevels = positionedMilestones.map(m => {
+                        let level = 0;
+                        for (let lvl = 0; lvl < 10; lvl++) {
+                          if (levels[lvl] === undefined || m.leftPercent - levels[lvl] >= minSpacing) {
+                            level = lvl;
+                            levels[lvl] = m.leftPercent;
+                            break;
+                          }
+                        }
+                        return { ...m, level };
+                      });
+
+                      return milestonesWithLevels.map(m => {
+                        const isDone = m.status === "완료";
+                        const isWorking = m.status === "진행";
+                        const iconColor = isDone ? "text-slate-400" : isWorking ? "text-indigo-600" : "text-amber-500";
+                        const badgeBg = isDone 
+                          ? "bg-slate-50/95 text-slate-500 border-slate-300" 
+                          : isWorking 
+                          ? "bg-indigo-50/95 text-indigo-700 border-indigo-200 ring-1 ring-indigo-100" 
+                          : "bg-amber-50/95 text-amber-750 border-amber-200";
+
+                        // 겹치는 이정표인 경우 레벨에 따라 세로 top 값을 다르게 엇갈림 배치합니다 (헤더 아래 54px 기준, 36px씩 스태거)
+                        const topPosition = 54 + (m.level * 36);
+
+                        return (
+                          <div
+                            key={m.id}
+                            className="absolute top-0 bottom-0 pointer-events-none flex flex-col items-center z-20"
+                            style={{ left: `${m.leftPercent}%` }}
+                          >
+                            {/* 가이드 수직 점선 */}
+                            <div className="w-0 border-l border-dashed border-indigo-500/20 h-full absolute top-0 pointer-events-none"></div>
+                            
+                            {/* 귀여운 이정표 핀 뱃지 */}
+                            <div 
+                              className={`pointer-events-auto absolute -translate-x-1/2 flex items-center space-x-1 px-2.5 py-1 rounded-full border shadow-sm ${badgeBg} text-[10px] font-black whitespace-nowrap cursor-help hover:scale-105 hover:z-30 transition-all duration-150`}
+                              style={{ top: `${topPosition}px` }}
+                              title={`${m.name} (${m.targetDate}) - 진행단계: ${m.status}`}
+                            >
+                              <Flag className={`w-3 h-3 ${iconColor} fill-current`} />
+                              <span>{m.name}</span>
+                              <span className="text-[9px] opacity-85 font-normal">({m.targetDate.substring(5)})</span>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+
                     {/* 월 헤더 가로선 */}
                     <div className="flex border-b border-slate-200 sticky top-0 bg-white z-10 shadow-sm">
                       {getGanttMonths().map((month, idx) => (
                         <div key={idx} className="flex-1 py-4 text-center text-xs font-bold text-slate-500 border-r border-slate-100">
-                          {month.getFullYear()}년 {month.getMonth() + 1}월
+                          {month.getMonth() + 1}월
                         </div>
                       ))}
                     </div>
@@ -954,22 +1782,35 @@ export default function App() {
                             {phaseTasks.map(task => {
                               const barPlacement = calculateTimelineBarPosition(task.startDate, task.endDate);
                               return (
-                                <div key={task.id} className="h-[57px] relative flex items-center border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
+                                <div key={task.id} className="h-[68px] relative flex items-center border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
+                                  {/* 타임라인 바 (도형) */}
                                   <div
                                     onClick={() => handleEditTask(task)}
                                     title={`${task.name} (${task.progress}% 완료)`}
-                                    className={`absolute h-7 rounded-lg flex items-center justify-between px-3 text-[10px] font-bold text-white shadow-sm overflow-hidden transition-all duration-300 ${phaseColor.bar} cursor-pointer hover:opacity-90 max-w-full`}
+                                    className={`absolute h-7 rounded-lg flex items-center justify-center px-2 text-[10px] font-extrabold text-white shadow-sm overflow-hidden transition-all duration-300 ${phaseColor.bar} cursor-pointer hover:opacity-90 max-w-full`}
                                     style={{
                                       left: `${barPlacement.left}%`,
                                       width: `${barPlacement.width}%`,
+                                      top: '8px'
                                     }}
                                   >
                                     <div
                                       className="bg-white/20 absolute left-0 top-0 bottom-0 transition-all duration-700"
                                       style={{ width: `${task.progress}%` }}
                                     ></div>
-                                    <span className="relative z-10 truncate tracking-tight">{task.name}</span>
-                                    <span className="relative z-10 text-[9px] filter drop-shadow font-extrabold text-white/95">{task.progress}%</span>
+                                    <span className="relative z-10 filter drop-shadow text-white font-extrabold">{task.progress}%</span>
+                                  </div>
+
+                                  {/* 도형 바로 아래 텍스트 (줄바꿈 없이 노출) */}
+                                  <div
+                                    onClick={() => handleEditTask(task)}
+                                    className="absolute text-[11px] font-semibold text-slate-600 hover:text-indigo-600 cursor-pointer whitespace-nowrap z-10"
+                                    style={{
+                                      left: `${barPlacement.left}%`,
+                                      top: '38px'
+                                    }}
+                                  >
+                                    {task.name}
                                   </div>
                                 </div>
                               );
@@ -1013,7 +1854,7 @@ export default function App() {
 
               {/* 밀스톤 타임 그리드 분포 모델 */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto hide-scrollbar">
-                <div className="min-w-[800px] relative h-28">
+                <div className="min-w-[800px] relative h-36">
                   <div className="absolute bottom-6 left-0 right-0 h-1 bg-gradient-to-r from-indigo-100 to-indigo-200 rounded"></div>
                   
                   {milestones
@@ -1047,7 +1888,7 @@ export default function App() {
                             {isDone && <CheckCircle2 className="w-3.5 h-3.5 text-white stroke-[3.5]" />}
                           </div>
                           <div className="w-0.5 h-10 bg-slate-200 mt-2"></div>
-                          <span className="text-[10px] text-slate-500 font-extrabold mt-1.5 bg-white px-2.5 py-1 rounded-full border border-slate-100 shadow-sm">
+                          <span className="text-[10px] text-slate-500 font-extrabold mt-1.5 bg-white px-2.5 py-1 rounded-full border border-slate-100 shadow-sm whitespace-nowrap">
                             {pillText}
                           </span>
                         </div>
@@ -1400,17 +2241,17 @@ export default function App() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">테마 색상 매핑</label>
-                <div className="flex space-x-3.5">
-                  {(["indigo", "emerald", "amber", "rose", "purple"] as const).map(col => (
+                <label className="block text-xs font-bold text-slate-500 mb-2">테마 색상 매핑 (30가지 풍부한 스펙트럼)</label>
+                <div className="grid grid-cols-10 gap-2 p-3 border border-slate-100/90 rounded-xl bg-slate-50/50 max-h-[160px] overflow-y-auto">
+                  {PHASE_COLORS.map(col => (
                     <button
-                      key={col}
-                      onClick={() => setEditingPhase({ ...editingPhase, color: col })}
-                      className={`w-8 h-8 rounded-full shadow-sm cursor-pointer border-2 transition-all ${
-                        editingPhase.color === col ? "border-slate-800 scale-110 ring-2 ring-indigo-500/10" : "border-transparent"
-                      } ${
-                        col === "indigo" ? "bg-indigo-500" : col === "emerald" ? "bg-emerald-500" : col === "amber" ? "bg-amber-500" : col === "rose" ? "bg-rose-500" : "bg-purple-500"
-                      }`}
+                      key={col.id}
+                      type="button"
+                      onClick={() => setEditingPhase({ ...editingPhase, color: col.id })}
+                      className={`w-7 h-7 rounded-full shadow-sm cursor-pointer border-2 transition-all hover:scale-110 active:scale-95 duration-150 ${
+                        editingPhase.color === col.id ? "border-slate-800 scale-110 ring-2 ring-indigo-500/30" : "border-white/50"
+                      } ${col.bgClass}`}
+                      title={col.name}
                     ></button>
                   ))}
                 </div>
