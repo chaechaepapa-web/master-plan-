@@ -217,19 +217,7 @@ export default function App() {
   useEffect(() => { localStorage.setItem("hb_text_menu_risks", menuRisks); }, [menuRisks]);
 
   // 🔒 프로젝트 잠금/보호 기능용 상태 및 헬퍼 정의
-  const [unlockedProjects, setUnlockedProjects] = useState<{[key: string]: boolean}>(() => {
-    const saved = localStorage.getItem("hb_unlocked_projects");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem("hb_unlocked_projects", JSON.stringify(unlockedProjects));
-  }, [unlockedProjects]);
+  const [unlockedProjects, setUnlockedProjects] = useState<{[key: string]: boolean}>({});
 
   const [newProjPassword, setNewProjPassword] = useState("");
   const [passwordTargetProjId, setPasswordTargetProjId] = useState<string | null>(null);
@@ -1498,6 +1486,7 @@ export default function App() {
           {/* 포트폴리오 메인 복귀 버튼 */}
           <button
             onClick={() => {
+              setUnlockedProjects({});
               setActiveTab("projects");
               showToast("📂 프로젝트 선택 및 포트폴리오 메인으로 복귀했습니다.");
             }}
