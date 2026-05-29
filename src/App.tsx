@@ -75,6 +75,144 @@ const defaultRisks: Risk[] = [
   { id: "r3", msId: "m4", title: "결제 API V2 업데이트에 따른 스펙 전면 수정 리스크", prob: 3, impact: 5, strategy: "완화 (Mitigate)", mitigation: "V1 유지 파트너사 협의", owner: "박개발", status: "Open" }
 ];
 
+// 텍스트 일괄 편집용 양방향 생성기 및 파서
+function generateTextFromWbs(phasesList: Phase[], tasksList: Task[]): string {
+  let text = `// 💡 WBS 대단계(Phase) 및 세부 업무(Task) 텍스트 일괄 동기화 기소 양식\n`;
+  text += `//   - [단계] 단계이름 (테마: 색상코드)\n`;
+  text += `//   - [태스크] 업무명 | 시작일(YYYY-MM-DD) | 종료일(YYYY-MM-DD) | 진도율(0~100%) | 담당자 | 메모:내용 | 발주연동:개월수 (옵션)\n`;
+  text += `// ⚠️ 세부 라인을 수정, 추가, 삭제한 뒤 [WBS 동기화 완료] 버튼을 클릭하면 즉시 메인 간트 차트가 변경됩니다.\n\n`;
+
+  phasesList.forEach(phase => {
+    text += `[단계] ${phase.name} (테마: ${phase.color})\n`;
+    const phaseTasks = tasksList.filter(t => t.phaseId === phase.id);
+    phaseTasks.forEach(task => {
+      const parts: string[] = [
+        `[태스크] ${task.name}`,
+        task.startDate,
+        task.endDate,
+        `${task.progress}%`,
+        task.owner || "미지정"
+      ];
+      if (task.memo) {
+        parts.push(`메모:${task.memo}`);
+      }
+      if (task.hasOrder && task.orderLeadTime) {
+        parts.push(`발주연동:${task.orderLeadTime}`);
+      }
+      text += `  - ${parts.join(" | ")}\n`;
+    });
+    text += `\n`;
+  });
+  return text;
+}
+
+function parseWbsFromText(text: string): { phases: Phase[]; tasks: Task[] } {
+  const lines = text.split("\n");
+  const newPhases: Phase[] = [];
+  const newTasks: Task[] = [];
+  
+  let currentPhaseId: string | null = null;
+  const phaseColorOptions = ["indigo", "emerald", "amber", "rose", "blue", "purple", "orange", "teal", "pink", "sky"];
+  let phaseColorIdx = 0;
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("//")) return;
+
+    if (trimmed.startsWith("[단계]") || trimmed.toLowerCase().startsWith("[phase]")) {
+      const rawText = trimmed.replace(/^\[단계\]\s*/i, "").replace(/^\[phase\]\s*/i, "");
+      let phaseName = rawText;
+      let color = "indigo";
+
+      const colorMatch = rawText.match(/\(테마:\s*([^)]+)\)/);
+      if (colorMatch) {
+         color = colorMatch[1].trim();
+         phaseName = rawText.replace(/\(테마:\s*[^)]+\)/, "").trim();
+      } else {
+         color = phaseColorOptions[phaseColorIdx % phaseColorOptions.length];
+         phaseColorIdx++;
+      }
+
+      const pId = `phase_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      newPhases.push({
+        id: pId,
+        name: phaseName.trim(),
+        color: color
+      });
+      currentPhaseId = pId;
+    } 
+    else if (
+      trimmed.startsWith("- [태스크]") || 
+      trimmed.startsWith("* [태스크]") || 
+      trimmed.startsWith("[태스크]") ||
+      trimmed.toLowerCase().startsWith("- [task]") || 
+      trimmed.toLowerCase().startsWith("* [task]") || 
+      trimmed.toLowerCase().startsWith("[task]")
+    ) {
+      if (!currentPhaseId) {
+        const pId = `phase_${Date.now()}_default`;
+        newPhases.push({
+          id: pId,
+          name: "미분류 초기 단계",
+          color: "indigo"
+        });
+        currentPhaseId = pId;
+      }
+
+      const rawText = trimmed
+        .replace(/^[-*]?\s*\[태스크\]\s*/i, "")
+        .replace(/^[-*]?\s*\[task\]\s*/i, "");
+      
+      const parts = rawText.split("|").map(p => p.trim());
+      if (parts.length >= 1 && parts[0]) {
+        const taskName = parts[0];
+        const startDate = parts[1] || "2026-05-01";
+        const endDate = parts[2] || "2026-05-15";
+        
+        let progress = 0;
+        if (parts[3]) {
+          const digits = parts[3].replace(/[^0-9]/g, "");
+          if (digits) progress = Math.min(100, Math.max(0, parseInt(digits, 10)));
+        }
+        
+        const owner = parts[4] || "미지정";
+        
+        let memo = "";
+        let hasOrder = false;
+        let orderLeadTime = 0;
+        
+        for (let i = 5; i < parts.length; i++) {
+          const opt = parts[i];
+          if (opt.startsWith("메모:")) {
+            memo = opt.replace("메모:", "").trim();
+          } else if (opt.startsWith("발주연동:")) {
+            hasOrder = true;
+            const digits = opt.replace(/[^0-9]/g, "");
+            if (digits) {
+              orderLeadTime = parseInt(digits, 10);
+            }
+          }
+        }
+
+        newTasks.push({
+          id: `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          phaseId: currentPhaseId,
+          name: taskName,
+          startDate: startDate,
+          endDate: endDate,
+          progress: progress,
+          owner: owner,
+          memo: memo || undefined,
+          hasOrder: hasOrder,
+          orderLeadTime: hasOrder ? orderLeadTime : undefined
+        });
+      }
+    }
+  });
+
+  return { phases: newPhases, tasks: newTasks };
+}
+
 export default function App() {
   // --- 로그인 상태 관리 및 크리덴셜 통제 ---
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
@@ -352,6 +490,7 @@ export default function App() {
   const [activePreviewImageUrl, setActivePreviewImageUrl] = useState<string | null>(null);
   const [quickMemoTaskId, setQuickMemoTaskId] = useState<string | null>(null);
   const [quickMemoText, setQuickMemoText] = useState<string>("");
+  const [wbsBulkText, setWbsBulkText] = useState<string>("");
 
   // 시스템 기준 날짜 (현재 local time: 2026-05-28)
   const todayStr = "2026-05-28";
@@ -2527,6 +2666,18 @@ export default function App() {
                         <Plus className="w-3.5 h-3.5" />
                         <span>태스크 추가</span>
                       </button>
+
+                      <button
+                        onClick={() => {
+                          setWbsBulkText(generateTextFromWbs(phases, tasks));
+                          setActiveModal("wbsBulkSync");
+                        }}
+                        className="bg-slate-700 hover:bg-slate-800 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-md shadow-slate-700/10 cursor-pointer flex items-center gap-1.5"
+                        title="텍스트 형식으로 일괄 입력 및 양방향 동기화"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>텍스트 일괄 동기화</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -4138,6 +4289,78 @@ export default function App() {
               </button>
               <button onClick={handleSaveTask} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold cursor-pointer animate-pulse">
                 업무 스펙 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🧾 WBS 텍스트 일괄 편집 및 동기화 모달 */}
+      {activeModal === "wbsBulkSync" && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-modalEntrance">
+            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-500" />
+                <span>WBS 텍스트 일괄 동기화 (Bulk Editor)</span>
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto flex flex-col min-h-0">
+              <p className="text-xs text-slate-500 leading-relaxed shrink-0">
+                WBS 구조를 한눈에 보며 텍스트로 자유롭게 편집하고 간트 차트와 실시간으로 동기화할 수 있습니다. 
+                아래 텍스트 형식을 유지하여 내용을 수정하거나 새 라인을 추가해 주십시오. (기존 데이터가 대체됩니다)
+              </p>
+              
+              <div className="flex-1 flex flex-col min-h-[300px]">
+                <textarea
+                  value={wbsBulkText}
+                  onChange={(e) => setWbsBulkText(e.target.value)}
+                  placeholder="[단계] 기획 단계\n  - [태스크] 요구사항 수집 | 2026-05-01 | 2026-05-15 | 100% | 홍길동"
+                  className="w-full flex-grow p-4 text-xs font-mono text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 resize-none h-full shadow-inner leading-relaxed"
+                />
+              </div>
+
+              <div className="bg-amber-50/50 p-3.5 rounded-xl border border-amber-200/55 shrink-0">
+                <h4 className="text-[11px] font-bold text-amber-800 mb-1">💡 작성 가이드:</h4>
+                <ul className="text-[10px] text-amber-700/90 list-disc list-inside space-y-1">
+                  <li><strong>대단계 추가:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded font-mono">[단계] 대단계이름 (테마: 색상)</code> (색상은 blue, indigo, emerald, amber, rose 등 가능)</li>
+                  <li><strong>세부업무 추가:</strong> <code className="bg-amber-100/60 px-1 py-0.5 rounded font-mono">- [태스크] 업무명 | 시작일 | 종료일 | 진도율% | 담당자</code> 순서로 파이프(<kbd>|</kbd>) 기호로 연동 구분</li>
+                  <li><strong>추가기능 (옵션):</strong> 각 항목 뒤에 <code className="bg-amber-100/60 px-1 py-0.5 rounded font-mono">| 메모:리포트작성</code> 또는 <code className="bg-amber-100/60 px-1 py-0.5 rounded font-mono">| 발주연동:3</code>(3개월 리드타임) 지정 가능</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 flex justify-end space-x-2 border-t border-slate-100 shrink-0">
+              <button 
+                onClick={() => setActiveModal(null)} 
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-100 rounded-xl text-xs font-extrabold text-slate-600 cursor-pointer"
+              >
+                취소
+              </button>
+              <button 
+                onClick={() => {
+                  try {
+                    const parsed = parseWbsFromText(wbsBulkText);
+                    if (parsed.phases.length === 0) {
+                      showToast("⚠️ 파싱된 대단계가 없습니다. 규칙에 맞게 텍스트를 입력해 주세요.");
+                      return;
+                    }
+                    setPhases(parsed.phases);
+                    setTasks(parsed.tasks);
+                    setActiveModal(null);
+                    showToast("💾 WBS 텍스트 동기화가 성공적으로 일괄 반영되었습니다!");
+                  } catch (err) {
+                    console.error(err);
+                    showToast("❌ 텍스트 파싱 오류가 발생했습니다. 파이프(|) 구분 기호를 확인해 주세요.");
+                  }
+                }} 
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold cursor-pointer"
+              >
+                💾 텍스트 WBS 동기화 반영
               </button>
             </div>
           </div>
