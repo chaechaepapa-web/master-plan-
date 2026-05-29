@@ -298,7 +298,7 @@ export default function App() {
 
   useEffect(() => {
     if (isA3LandscapePrintOpen) {
-      const monthCount = getGanttMonths().length;
+      const monthCount = getPrintGanttMonths().length;
       // 가로 규격은 420mm의 공간이 있으므로 보통 100%를 하되, 월 가수가 5개월을 초과하면 자동 스케일 다운하여 한눈에 쏙 들어가게 조절
       const autoScale = Math.min(100, Math.max(65, Math.round(100 - Math.max(0, monthCount - 5) * 5)));
       setLandscapePrintScale(autoScale);
@@ -539,6 +539,94 @@ export default function App() {
       safetyCounter++;
     }
     return months;
+  };
+
+  const getPrintGanttMonths = () => {
+    const allMonths = getGanttMonths();
+    const filteredTasks = getFilteredTasks(tasks);
+    if (filteredTasks.length === 0) return allMonths;
+
+    return allMonths.filter(month => {
+      const year = month.getFullYear();
+      const mIdx = month.getMonth();
+      const monthStart = new Date(year, mIdx, 1).getTime();
+      const monthEnd = new Date(year, mIdx + 1, 1).getTime() - 1;
+
+      return filteredTasks.some(task => {
+        const tStart = new Date(task.startDate).getTime();
+        const tEnd = new Date(task.endDate).getTime();
+        return tStart <= monthEnd && tEnd >= monthStart;
+      });
+    });
+  };
+
+  const getFractionalMonthIndex = (dateStr: string, displayedMonths: Date[]) => {
+    const d = new Date(dateStr);
+    const dTime = d.getTime();
+    const N = displayedMonths.length;
+    if (N === 0) return 0;
+
+    const monthTimes = displayedMonths.map(m => {
+      const start = new Date(m.getFullYear(), m.getMonth(), 1);
+      const end = new Date(m.getFullYear(), m.getMonth() + 1, 1);
+      return {
+        start: start.getTime(),
+        end: end.getTime(),
+      };
+    });
+
+    if (dTime <= monthTimes[0].start) {
+      return 0;
+    }
+    if (dTime >= monthTimes[N - 1].end) {
+      return N;
+    }
+
+    for (let i = 0; i < N; i++) {
+      if (dTime >= monthTimes[i].start && dTime < monthTimes[i].end) {
+        const ratio = (dTime - monthTimes[i].start) / (monthTimes[i].end - monthTimes[i].start);
+        return i + ratio;
+      }
+    }
+
+    for (let i = 0; i < N - 1; i++) {
+      if (dTime >= monthTimes[i].end && dTime < monthTimes[i + 1].start) {
+        return i + 1;
+      }
+    }
+
+    return 0;
+  };
+
+  const calculatePrintTimelineBarPosition = (task: Task, displayedMonths: Date[]) => {
+    const N = displayedMonths.length;
+    if (N === 0) return { left: 0, width: 100, leadWidth: 0, leadLeft: 0 };
+
+    const startIdx = getFractionalMonthIndex(task.startDate, displayedMonths);
+    const endIdx = getFractionalMonthIndex(task.endDate, displayedMonths);
+
+    let left = (startIdx / N) * 100;
+    let width = ((endIdx - startIdx) / N) * 100;
+
+    if (width < 2) width = 2; // 최소 가시성 확보
+    if (left < 0) left = 0;
+    if (left + width > 100) width = 100 - left;
+
+    let leadWidth = 0;
+    let leadLeft = left + width;
+
+    if (task.hasOrder && task.orderLeadTime) {
+      const taskEnd = new Date(task.endDate);
+      const leadEnd = new Date(taskEnd);
+      leadEnd.setMonth(leadEnd.getMonth() + task.orderLeadTime);
+      const leadEndIdx = getFractionalMonthIndex(leadEnd.toISOString().split('T')[0], displayedMonths);
+      leadWidth = ((leadEndIdx - endIdx) / N) * 100;
+      if (leadLeft + leadWidth > 100) {
+        leadWidth = 100 - leadLeft;
+      }
+    }
+
+    return { left, width, leadWidth, leadLeft };
   };
 
   const getDaysInMonthDateArray = (monthDate: Date) => {
@@ -4486,14 +4574,14 @@ export default function App() {
 
               {/* 2. PROJECT OVERVIEW HIGHLIGHTS */}
               <div className="grid grid-cols-4 gap-4 mb-6 shrink-0">
-                <div className="bg-slate-900 text-white rounded p-3.5 border border-slate-800 text-center flex flex-col justify-center">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">WBS 진척 현황</span>
-                  <strong className="text-xl font-mono font-black mt-1 text-emerald-400">
+                <div className="bg-white text-slate-900 rounded p-3.5 border border-slate-300 text-center flex flex-col justify-center shadow-sm">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-none font-sans">WBS 진척 현황</span>
+                  <strong className="text-xl font-mono font-black mt-1.5 text-indigo-600">
                     {tasks.length > 0
                       ? Math.round(tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length)
                       : 0}%
                   </strong>
-                  <span className="text-[9px] text-slate-400 font-mono mt-0.5">Weighted Progress</span>
+                  <span className="text-[9px] text-slate-400 font-mono mt-1">Weighted Progress</span>
                 </div>
                 <div className="bg-slate-50 border border-slate-200 rounded p-3.5 flex flex-col justify-center">
                   <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-center">PM & PMO OFFICE</span>
@@ -4513,25 +4601,25 @@ export default function App() {
               {/* 3. CORE PRINTABLE GANTT TIMELINE MATRIX */}
               <div className="border border-slate-900/90 rounded overflow-hidden bg-white">
                 {/* Visual Header Table */}
-                <div className="flex divide-x divide-slate-800 bg-slate-900 text-white text-xs font-bold font-sans">
+                <div className="flex divide-x divide-slate-300 bg-slate-100 text-slate-800 text-xs font-bold font-sans border-b border-slate-300">
                   {/* Left Head */}
-                  <div className="w-[30%] p-3 flex items-center justify-between shrink-0 bg-slate-950">
+                  <div className="w-[30%] p-3 flex items-center justify-between shrink-0 bg-slate-200/80 text-slate-900">
                     <span className="font-extrabold uppercase tracking-wide">단계 및 세부 업무 이름</span>
-                    <span className="text-[9px] font-normal text-slate-400">Owner | Progress</span>
+                    <span className="text-[9px] font-bold text-slate-500">Owner | Progress</span>
                   </div>
                   
                   {/* Right Monthly Timeline Bar Grids */}
-                  <div className="flex-1 flex divide-x divide-slate-800/60 bg-slate-900">
-                    {getGanttMonths().map((month, idx) => {
+                  <div className="flex-1 flex divide-x divide-slate-300 bg-slate-100">
+                    {getPrintGanttMonths().map((month, idx) => {
                       const days = getDaysInMonthDateArray(month);
                       return (
                         <div key={idx} className="flex-1 flex flex-col min-w-0 select-none">
                           {/* Month top block */}
-                          <div className="py-2 text-center text-[11px] font-black tracking-widest text-slate-200 border-b border-slate-800 bg-slate-950">
+                          <div className="py-2 text-center text-[11px] font-black tracking-widest text-slate-800 border-b border-slate-200 bg-slate-150/70">
                             {month.getMonth() + 1}월 (Month)
                           </div>
                           {/* Day sub-head ticks */}
-                          <div className="flex justify-between px-1 py-1 text-[8px] font-mono font-bold text-slate-400 bg-slate-900 border-b border-slate-800">
+                          <div className="flex justify-between px-1 py-1 text-[8px] font-mono font-bold text-slate-500 bg-slate-50 border-b border-slate-200">
                             {days.map(day => {
                               const isTargetDay = day === 1 || day % 5 === 0;
                               return (
@@ -4548,16 +4636,15 @@ export default function App() {
                 </div>
 
                 {/* Vertical table rows with task & timeline representation */}
-                <div className="divide-y divide-slate-900/60">
+                <div className="divide-y divide-slate-905">
                   {phases.map(phase => {
                     const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === phase.id);
-                    const phaseColor = getPhaseColorMap(phase.color);
                     
                     return (
                       <div key={phase.id} className="divide-y divide-slate-200">
                         {/* Phase Segment Header Row */}
                         <div className="flex bg-slate-50/80 font-bold border-b border-slate-350/65 flex-shrink-0">
-                          <div className="w-[30%] p-2.5 flex items-center shrink-0 border-r border-slate-900/40 bg-slate-100/75">
+                          <div className="w-[30%] p-2.5 flex items-center shrink-0 border-r border-slate-300 bg-slate-100/75">
                             <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
                               📂 {phase.name} 단계
                             </span>
@@ -4575,20 +4662,17 @@ export default function App() {
                           </div>
                         ) : (
                           phaseTasks.map(task => {
-                            const barPlacement = calculateTimelineBarPosition(task.startDate, task.endDate);
+                            const printGanttMonths = getPrintGanttMonths();
+                            const barPlacement = calculatePrintTimelineBarPosition(task, printGanttMonths);
                             const baseLeft = barPlacement.left;
                             const baseWidth = barPlacement.width;
-                            
-                            // Lead time calculation
-                            const leadWidth = task.hasOrder && task.orderLeadTime 
-                              ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
-                              : 0;
-                            const leadLeft = baseLeft + baseWidth;
+                            const leadWidth = barPlacement.leadWidth;
+                            const leadLeft = barPlacement.leadLeft;
 
                             return (
                               <div key={task.id} className="flex bg-white hover:bg-slate-50/30 transition-all font-sans text-[10px] flex-shrink-0">
                                 {/* Left Section info */}
-                                <div className="w-[30%] p-2.5 flex flex-col justify-center border-r border-slate-900/40 shrink-0 font-sans">
+                                <div className="w-[30%] p-2.5 flex flex-col justify-center border-r border-slate-300 shrink-0 font-sans">
                                   <div className="flex items-start justify-between gap-1">
                                     <strong className="text-slate-900 text-[10.5px] font-bold leading-normal truncate">{task.name}</strong>
                                     <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 block font-mono shrink-0 font-bold">
@@ -4604,8 +4688,8 @@ export default function App() {
                                 {/* Right Section: Timeline Bar Space */}
                                 <div className="flex-1 relative h-11 bg-white flex divide-x divide-slate-100/60 overflow-hidden font-mono">
                                   {/* Draw standard visual column columns guidelines for reference */}
-                                  {getGanttMonths().map((_, mIdx) => (
-                                    <div key={mIdx} className="flex-1 h-full pointer-events-none border-r border-slate-100 last:border-r-0"></div>
+                                  {printGanttMonths.map((_, mIdx) => (
+                                    <div key={mIdx} className="flex-1 h-full pointer-events-none border-r border-slate-105 last:border-r-0"></div>
                                   ))}
 
                                   {/* Real Gantt graphical bar plotted with CSS */}
@@ -4840,9 +4924,9 @@ export default function App() {
 
                 {/* 2. PROJECT OVERVIEW HIGHLIGHTS */}
                 <div className="grid grid-cols-4 gap-4 mb-5 shrink-0">
-                  <div className="bg-slate-900 text-white rounded p-3 border border-slate-800 text-center flex flex-col justify-center">
-                    <span className="text-[8.5px] font-bold text-slate-400 tracking-widest">WBS 진척율 (평균 가중치)</span>
-                    <strong className="text-lg font-mono font-black mt-0.5 text-emerald-400">
+                  <div className="bg-white text-slate-900 rounded p-3 border border-slate-300 text-center flex flex-col justify-center shadow-sm">
+                    <span className="text-[8.5px] font-bold text-slate-500 tracking-widest leading-none font-sans">WBS 진척율 (평균 가중치)</span>
+                    <strong className="text-lg font-mono font-black mt-1 text-emerald-600">
                       {tasks.length > 0
                         ? Math.round(tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length)
                         : 0}%
@@ -4865,25 +4949,25 @@ export default function App() {
                 {/* 3. CORE PRINTABLE GANTT TIMELINE MATRIX */}
                 <div className="border border-slate-900/90 rounded overflow-hidden bg-white shadow-2xl">
                   {/* Visual Header Table */}
-                  <div className="flex divide-x divide-slate-800 bg-slate-900 text-white text-xs font-bold font-sans">
+                  <div className="flex divide-x divide-slate-300 bg-slate-100 text-slate-800 text-xs font-bold font-sans border-b border-slate-300">
                     {/* Left Head: 가로에서는 25% 비율을 주어 타임라인 면적을 75%까지 확장시킨다 */}
-                    <div className="w-[25%] p-3 flex items-center justify-between shrink-0 bg-slate-950">
+                    <div className="w-[25%] p-3 flex items-center justify-between shrink-0 bg-slate-200/80 text-slate-900">
                       <span className="font-extrabold uppercase tracking-wide text-[11px]">대구분 단계 및 세부 태스크</span>
-                      <span className="text-[8.5px] font-normal text-slate-400">HW / %</span>
+                      <span className="text-[8.5px] font-bold text-slate-500">HW / %</span>
                     </div>
                     
                     {/* Right Monthly Timeline Bar Grids */}
-                    <div className="flex-1 flex divide-x divide-slate-800/60 bg-slate-900">
-                      {getGanttMonths().map((month, idx) => {
+                    <div className="flex-1 flex divide-x divide-slate-300 bg-slate-100">
+                      {getPrintGanttMonths().map((month, idx) => {
                         const days = getDaysInMonthDateArray(month);
                         return (
                           <div key={idx} className="flex-1 flex flex-col min-w-0 select-none">
                             {/* Month top block */}
-                            <div className="py-1.5 text-center text-[10px] font-black tracking-widest text-slate-200 border-b border-slate-800 bg-slate-950">
+                            <div className="py-1.5 text-center text-[10px] font-black tracking-widest text-slate-800 border-b border-slate-200 bg-slate-150/70">
                               {month.getMonth() + 1}월
                             </div>
                             {/* Day sub-head ticks */}
-                            <div className="flex justify-between px-1 py-1 text-[7.5px] font-mono font-bold text-slate-400 bg-slate-900 border-b border-slate-800 animate-pulse">
+                            <div className="flex justify-between px-1 py-1 text-[7.5px] font-mono font-bold text-slate-500 bg-slate-50 border-b border-slate-200">
                               {days.map(day => {
                                 const isTargetDay = day === 1 || day % 5 === 0;
                                 return (
@@ -4900,7 +4984,7 @@ export default function App() {
                   </div>
 
                   {/* Vertical table rows with task & timeline representation */}
-                  <div className="divide-y divide-slate-900/60">
+                  <div className="divide-y divide-slate-905">
                     {phases.map(phase => {
                       const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === phase.id);
                       
@@ -4908,7 +4992,7 @@ export default function App() {
                         <div key={phase.id} className="divide-y divide-slate-100">
                           {/* Phase Segment Header Row */}
                           <div className="flex bg-slate-50/90 font-bold border-b border-slate-350/65 flex-shrink-0">
-                            <div className="w-[25%] p-2 flex items-center shrink-0 border-r border-slate-900/40 bg-slate-100/75 shadow-inner">
+                            <div className="w-[25%] p-2 flex items-center shrink-0 border-r border-slate-300 bg-slate-100/75 shadow-inner">
                               <span className="text-[10px] font-black text-slate-900 flex items-center gap-1.5">
                                 🟩 {phase.name} Phase
                               </span>
@@ -4926,20 +5010,17 @@ export default function App() {
                             </div>
                           ) : (
                             phaseTasks.map(task => {
-                              const barPlacement = calculateTimelineBarPosition(task.startDate, task.endDate);
+                              const printGanttMonths = getPrintGanttMonths();
+                              const barPlacement = calculatePrintTimelineBarPosition(task, printGanttMonths);
                               const baseLeft = barPlacement.left;
                               const baseWidth = barPlacement.width;
-                              
-                              // Lead time calculation
-                              const leadWidth = task.hasOrder && task.orderLeadTime 
-                                ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
-                                : 0;
-                              const leadLeft = baseLeft + baseWidth;
+                              const leadWidth = barPlacement.leadWidth;
+                              const leadLeft = barPlacement.leadLeft;
 
                               return (
                                 <div key={task.id} className="flex bg-white hover:bg-slate-50/10 transition-colors font-sans text-[10px] flex-shrink-0">
                                   {/* Left Section info */}
-                                  <div className="w-[25%] p-2 flex flex-col justify-center border-r border-slate-900/40 shrink-0 font-sans">
+                                  <div className="w-[25%] p-2 flex flex-col justify-center border-r border-slate-300 shrink-0 font-sans">
                                     <div className="flex items-start justify-between gap-1 w-full">
                                       <strong className="text-slate-900 text-[10px] font-bold leading-normal truncate max-w-[200px]">{task.name}</strong>
                                       <span className="text-[8.5px] px-1 bg-slate-100 rounded text-slate-600 block font-mono shrink-0 font-black">
@@ -4955,8 +5036,8 @@ export default function App() {
                                   {/* Right Section: Timeline Bar Space */}
                                   <div className="flex-grow flex-1 relative h-9.5 bg-white flex divide-x divide-slate-100/40 overflow-hidden font-mono">
                                     {/* Draw grid columns for reference points */}
-                                    {getGanttMonths().map((_, mIdx) => (
-                                      <div key={mIdx} className="flex-1 h-full pointer-events-none border-r border-slate-105/50 last:border-r-0"></div>
+                                    {printGanttMonths.map((_, mIdx) => (
+                                      <div key={mIdx} className="flex-1 h-full pointer-events-none border-r border-slate-105 last:border-r-0"></div>
                                     ))}
 
                                     {/* Real Gantt timeline graphical bar */}
