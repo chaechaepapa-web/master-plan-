@@ -32,7 +32,9 @@ import {
   Image,
   Upload,
   Camera,
-  GripVertical
+  GripVertical,
+  Printer,
+  Download
 } from "lucide-react";
 import { ProjectInfo, Phase, Task, Milestone, Risk } from "./types";
 
@@ -280,15 +282,28 @@ export default function App() {
   useEffect(() => { localStorage.setItem("hb_text_menu_milestones", menuMilestones); }, [menuMilestones]);
   useEffect(() => { localStorage.setItem("hb_text_menu_risks", menuRisks); }, [menuRisks]);
 
+
   // 모달 제어용 상태
   const [activeModal, setActiveModal] = useState<string | null>(null);
 
   // --- 스크린샷 캡처용 깔끔한 보기(클린 뷰) 및 검색·필터링 상태 ---
   const [isCleanView, setIsCleanView] = useState<boolean>(false);
+  const [isA3PrintOpen, setIsA3PrintOpen] = useState<boolean>(false);
+  const [isA3LandscapePrintOpen, setIsA3LandscapePrintOpen] = useState<boolean>(false);
+  const [landscapePrintScale, setLandscapePrintScale] = useState<number>(100);
   const [filterOwner, setFilterOwner] = useState<string>("All");
   const [filterProgress, setFilterProgress] = useState<string>("All"); // All, Completed, Ongoing, NotStarted
   const [filterHasOrder, setFilterHasOrder] = useState<string>("All"); // All, Yes, No
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  useEffect(() => {
+    if (isA3LandscapePrintOpen) {
+      const monthCount = getGanttMonths().length;
+      // 가로 규격은 420mm의 공간이 있으므로 보통 100%를 하되, 월 가수가 5개월을 초과하면 자동 스케일 다운하여 한눈에 쏙 들어가게 조절
+      const autoScale = Math.min(100, Math.max(65, Math.round(100 - Math.max(0, monthCount - 5) * 5)));
+      setLandscapePrintScale(autoScale);
+    }
+  }, [isA3LandscapePrintOpen]);
 
   // --- 드래그 앤 드롭을 통한 태스크 및 구분 단계(Phase) 순서 제어 상태 ---
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -1997,24 +2012,46 @@ export default function App() {
         {/* 글로벌 조건 필터 및 실시간 캡처용 조율 패널 */}
         <div className="bg-slate-50 border-b border-slate-200 px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 shrink-0 transition-all">
           {isCleanView ? (
-            // 클린뷰 작동 중일 때의 인쇄/캡처 최적화 요약 필터 배지
-            <div className="flex items-center space-x-2.5 text-xs font-semibold text-slate-500 py-1">
-              <span className="flex items-center gap-1 bg-indigo-50 border border-indigo-100/80 px-2.5 py-1 rounded-full text-[10px] text-indigo-700">
-                <ShieldCheck className="w-3 h-3 text-indigo-500" />
-                <strong>📸 캡처 전용 정돈 모드 활성 중 (사이드바 및 수정 도구 미출력)</strong>
-              </span>
-              {(filterOwner !== "All" || filterProgress !== "All" || filterHasOrder !== "All" || searchQuery.trim() !== "") ? (
-                <span className="flex items-center gap-1 bg-amber-50 border border-amber-100/80 px-2.5 py-1 rounded-full text-[10px] text-amber-700">
-                  <span>지정 필터 가동 중: </span>
-                  {filterOwner !== "All" && <span className="font-extrabold font-mono">[{filterOwner}]</span>}
-                  {filterProgress !== "All" && <span className="font-extrabold font-mono">[{filterProgress === "Completed" ? "완료" : filterProgress === "Ongoing" ? "진행중" : "미시작"}]</span>}
-                  {filterHasOrder !== "All" && <span className="font-extrabold font-mono">[{filterHasOrder === "Yes" ? "발주품연관" : "발주품없음"}]</span>}
-                  {searchQuery.trim() !== "" && <span className="font-extrabold font-mono">['{searchQuery}']</span>}
+            <>
+              {/* 클린뷰 작동 중일 때의 인쇄/캡처 최적화 요약 필터 배지 */}
+              <div className="flex items-center space-x-2.5 text-xs font-semibold text-slate-500 py-1">
+                <span className="flex items-center gap-1 bg-indigo-50 border border-indigo-100/80 px-2.5 py-1 rounded-full text-[10px] text-indigo-700">
+                  <ShieldCheck className="w-3 h-3 text-indigo-500" />
+                  <strong>📸 캡처 전용 정돈 모드 활성 중 (사이드바 및 수정 도구 미출력)</strong>
                 </span>
-              ) : (
-                <span className="text-[10px] text-slate-400 font-medium">전체 데이터 투명 표출 상태</span>
-              )}
-            </div>
+                {(filterOwner !== "All" || filterProgress !== "All" || filterHasOrder !== "All" || searchQuery.trim() !== "") ? (
+                  <span className="flex items-center gap-1 bg-amber-50 border border-amber-100/80 px-2.5 py-1 rounded-full text-[10px] text-amber-700">
+                    <span>지정 필터 가동 중: </span>
+                    {filterOwner !== "All" && <span className="font-extrabold font-mono">[{filterOwner}]</span>}
+                    {filterProgress !== "All" && <span className="font-extrabold font-mono">[{filterProgress === "Completed" ? "완료" : filterProgress === "Ongoing" ? "진행중" : "미시작"}]</span>}
+                    {filterHasOrder !== "All" && <span className="font-extrabold font-mono">[{filterHasOrder === "Yes" ? "발주품연관" : "발주품없음"}]</span>}
+                    {searchQuery.trim() !== "" && <span className="font-extrabold font-mono">['{searchQuery}']</span>}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-400 font-medium">전체 데이터 투명 표출 상태</span>
+                )}
+              </div>
+
+              {/* 🖨️ A3 세로 인쇄양식 (PDF) 생성 단추 */}
+              <button
+                onClick={() => setIsA3PrintOpen(true)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 hover:scale-[1.02] active:scale-95 text-white rounded-xl text-xs font-extrabold transition-all shadow-md shadow-indigo-600/15 cursor-pointer flex items-center gap-1.5 shrink-0"
+                title="A3 세로규격 정식 일정표 출력 양식 생성"
+              >
+                <Printer className="w-3.5 h-3.5 animate-pulse" />
+                <span>📄 A3 세로 WBS 인쇄 양식 생성</span>
+              </button>
+
+              {/* 🖨️ A3 가로 인쇄양식 (PDF) 생성 단추 */}
+              <button
+                onClick={() => setIsA3LandscapePrintOpen(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 hover:scale-[1.02] active:scale-95 text-white rounded-xl text-xs font-extrabold transition-all shadow-md shadow-emerald-600/15 cursor-pointer flex items-center gap-1.5 shrink-0"
+                title="A3 가로규격 정식 일정표 출력 양식 생성 (배율 가로 일괄 자동 맞춤)"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>📟 A3 가로 WBS 인쇄 양식 생성</span>
+              </button>
+            </>
           ) : (
             // 일반 관리 중일 때 조작 가능한 친절하고 강력한 필터 정렬판
             <div className="flex flex-wrap items-center gap-3 w-full">
@@ -2123,7 +2160,7 @@ export default function App() {
         <div className={`flex-grow ${isCleanView ? 'p-12 space-y-16' : 'p-8 space-y-8'} overflow-y-auto custom-scrollbar font-sans bg-slate-50/20`}>
           
           {/* ================= 탭 1: 종합 진단 요약 (대시보드) ================= */}
-          {(isCleanView || activeTab === "dashboard") && (
+          {(!isCleanView && activeTab === "dashboard") && (
             <div className="space-y-8 animate-fadeIn">
               {isCleanView && (
                 <div className="border-b-2 border-slate-900 pb-3.5 mt-4">
@@ -2466,12 +2503,6 @@ export default function App() {
                           <span className="text-xs font-bold text-slate-400">진치율 조절 / 옵션</span>
                         </div>
                         <div className="flex-grow flex bg-white min-w-[800px] relative">
-                          {/* 시작일 라벨 */}
-                          <div className="absolute left-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                            <span>{project.startDate}</span>
-                          </div>
-
                           {getGanttMonths().map((month, idx) => {
                             const days = getDaysInMonthDateArray(month);
                             return (
@@ -2494,12 +2525,6 @@ export default function App() {
                               </div>
                             );
                           })}
-
-                          {/* 종료일 라벨 */}
-                          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                            <span>{project.endDate}</span>
-                          </div>
                         </div>
                       </div>
 
@@ -2533,7 +2558,7 @@ export default function App() {
                                   draggable={!isCleanView}
                                   onDragStart={(e) => handlePhaseDragStart(e, phase.id)}
                                   onDragEnd={handlePhaseDragEnd}
-                                  className={`w-[440px] shrink-0 sticky left-0 bg-slate-50/95 z-10 border-r border-slate-200 p-4 flex justify-between items-center transition-all ${!isCleanView ? "cursor-grab active:cursor-grabbing" : ""}`}
+                                  className={`w-[440px] shrink-0 sticky left-0 bg-slate-50 z-24 border-r border-slate-200 p-4 flex justify-between items-center transition-all ${!isCleanView ? "cursor-grab active:cursor-grabbing" : ""}`}
                                 >
                                   <div className="flex items-center space-x-2 min-w-0 flex-1">
                                     {!isCleanView && (
@@ -2604,7 +2629,7 @@ export default function App() {
                                     }`}
                                   >
                                     {/* Left Sticky Task Metadata Cell */}
-                                    <div className="w-[440px] shrink-0 sticky left-0 bg-white z-10 border-r border-slate-200 pl-6 pr-4 py-3.5 flex flex-col justify-center space-y-2.5 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                    <div className="w-[440px] shrink-0 sticky left-0 bg-white z-24 border-r border-slate-200 pl-6 pr-4 py-3.5 flex flex-col justify-center space-y-2.5 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                                       <div className="flex justify-between items-start w-full gap-2">
                                         <div className="min-w-0 pr-1 flex-1 flex items-start gap-2">
                                           {!isCleanView && (
@@ -2879,7 +2904,7 @@ export default function App() {
 
                               {phaseTasks.length === 0 && (
                                 <div className="flex flex-row border-b border-slate-100/60 bg-slate-50/10 h-12">
-                                  <div className="w-[440px] shrink-0 sticky left-0 bg-white z-10 border-r border-slate-200 pl-8 flex items-center">
+                                  <div className="w-[440px] shrink-0 sticky left-0 bg-white z-24 border-r border-slate-200 pl-8 flex items-center">
                                     <p className="text-[11px] text-slate-300 italic">이 단계에 배속된 태스크가 없습니다.</p>
                                   </div>
                                   <div className="flex-grow min-w-[800px] relative"></div>
@@ -3215,12 +3240,6 @@ export default function App() {
 
                     {/* 월 헤더 가로선 */}
                     <div className="flex border-b border-slate-200 sticky top-0 bg-white z-10 shadow-sm relative">
-                      {/* 시작일 라벨 */}
-                      <div className="absolute left-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        <span>{project.startDate}</span>
-                      </div>
-
                       {getGanttMonths().map((month, idx) => {
                         const days = getDaysInMonthDateArray(month);
                         return (
@@ -3243,12 +3262,6 @@ export default function App() {
                           </div>
                         );
                       })}
-
-                      {/* 종료일 라벨 */}
-                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                        <span>{project.endDate}</span>
-                      </div>
                     </div>
 
                     {/* 타임라인 바 영역 */}
@@ -3383,7 +3396,7 @@ export default function App() {
           )}
 
           {/* ================= 탭 3: 마일스톤 관리 및 퀵 업데이트 ================= */}
-          {(isCleanView || activeTab === "milestones") && (
+          {(!isCleanView && activeTab === "milestones") && (
             <div className="space-y-6 animate-fadeIn">
               {isCleanView && (
                 <div className="border-b-2 border-slate-900 pb-3.5 mt-8">
@@ -3591,7 +3604,7 @@ export default function App() {
           )}
 
           {/* ================= 탭 4: 리스크 레지스터 ================= */}
-          {(isCleanView || activeTab === "risks") && (
+          {(!isCleanView && activeTab === "risks") && (
             <div className="space-y-6 animate-fadeIn">
               {isCleanView && (
                 <div className="border-b-2 border-slate-900 pb-3.5 mt-8">
@@ -4336,6 +4349,664 @@ export default function App() {
               <button onClick={handleSaveRisk} className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-extrabold cursor-pointer">
                 위험요소 통제대장 기록
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🖨️ ================= 8. A3 규격 세로 인쇄양식 (PDF) 모달 룸 ================= */}
+      {isA3PrintOpen && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex flex-col items-center justify-start py-8 px-4 overflow-y-auto print:p-0 print:bg-white animate-fadeIn">
+          {/* Print controls bar */}
+          <div className="w-full max-w-[297mm] bg-slate-905 border border-slate-800 text-white rounded-2xl px-6 py-4 mb-6 flex flex-wrap items-center justify-between gap-4 shadow-xl shrink-0 print:hidden">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-white shadow-md">
+                <Printer className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-100 flex items-center gap-2">
+                  <span>A3 세로 정식 인쇄 도면 양식 v1.2</span>
+                  <span className="text-[9px] bg-slate-800 border border-slate-700 font-mono tracking-wider font-extrabold px-1.5 py-0.5 rounded text-indigo-400">
+                    A3 PORTRAIT 297x420mm
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  현물 출력 및 통합 계획 심의용으로 조율된 계층식 고가시성 WBS 및 5일 간격 타임라인 양식입니다.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => {
+                  window.print();
+                }}
+                className="px-4.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-lg shadow-indigo-600/30 cursor-pointer flex items-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" />
+                <span>PDF로 저장 및 도면 출력</span>
+              </button>
+              
+              <button
+                onClick={() => setIsA3PrintOpen(false)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <X className="w-4 h-4" />
+                <span>양식 닫기</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Core A3 Print Canvas */}
+          <div 
+            id="a3-portrait-print-area"
+            className="bg-white text-slate-900 w-[297mm] min-h-[420mm] p-[16mm] shadow-2xl border border-slate-300/80 rounded-lg relative flex flex-col justify-between overflow-hidden print:shadow-none print:border-none print:p-[10mm] print:m-0 print:w-[297mm] print:h-[420mm] bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] bg-[size:24px_24px]"
+          >
+            {/* Custom print styles specialized inside compile time */}
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body {
+                  background: white !important;
+                  color: black !important;
+                }
+                #root > div, #root > div > main > * {
+                  display: none !important;
+                }
+                #a3-portrait-print-area, #a3-portrait-print-area * {
+                  display: block !important;
+                  visibility: visible !important;
+                }
+                #a3-portrait-print-area {
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 297mm !important;
+                  height: 420mm !important;
+                  padding: 12mm !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                  background: white !important;
+                  margin: 0 !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+                .force-flex {
+                  display: flex !important;
+                }
+              }
+            `}} />
+
+            <div>
+              {/* 1. BLUEPRINT HEADER BLOCK */}
+              <div className="border border-slate-900/90 rounded overflow-hidden flex divide-x divide-slate-900/90 mb-6 shrink-0 bg-white">
+                <div className="w-[180px] p-3 text-center flex flex-col justify-center bg-slate-50">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">DOCUMENT CODE</span>
+                  <strong className="text-[14px] font-mono font-black text-slate-800 mt-1.5">PROJ-WBS-A3P</strong>
+                  <div className="border-t border-slate-900/20 my-1 pb-1"></div>
+                  <span className="text-[9px] font-black text-slate-450 uppercase tracking-widest leading-none">REVISION DATE</span>
+                  <strong className="text-xs font-mono font-bold text-slate-700 mt-1">2026-05-29 (금)</strong>
+                </div>
+                
+                <div className="flex-1 p-4 flex flex-col justify-center items-start">
+                  <div className="text-[9px] font-black text-indigo-600 uppercase tracking-widest px-2 py-0.5 bg-indigo-50 border border-indigo-150/40 rounded-full mb-1">
+                    📂 PORTRAIT WBS TIMELINE CHART
+                  </div>
+                  <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight leading-none mt-1">
+                    {project.title}
+                  </h1>
+                  <p className="text-[11px] text-slate-500 mt-2 font-medium">
+                    본 문서는 하단에 도출된 개발 단계 구획별 태스크 일정의 수명주기 및 5일단위 진척 임계 상태를 정식 요약 기술한 A3 규판 인쇄본입니다.
+                  </p>
+                </div>
+
+                <div className="w-[280px] shrink-0 divide-x divide-slate-900/90 flex bg-white font-sans text-[10px]">
+                  <div className="w-1/3 flex flex-col text-center">
+                    <div className="py-1 border-b border-slate-900/90 bg-slate-100 font-bold text-slate-600">작 성</div>
+                    <div className="flex-grow flex items-center justify-center font-extrabold text-slate-800 p-2 leading-tight">
+                      {project.pm || "김PM"}
+                    </div>
+                  </div>
+                  <div className="w-1/3 flex flex-col text-center">
+                    <div className="py-1 border-b border-slate-900/90 bg-slate-100 font-bold text-slate-600">검 토</div>
+                    <div className="flex-grow flex items-center justify-center font-extrabold text-slate-400 p-2 text-[10px] italic">
+                      서명생략
+                    </div>
+                  </div>
+                  <div className="w-1/3 flex flex-col text-center">
+                    <div className="py-1 border-b border-slate-900/90 bg-slate-100 font-bold text-slate-600">서 명</div>
+                    <div className="flex-grow flex items-center justify-center font-black text-indigo-600 p-2 text-xs">
+                      APPROVED
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. PROJECT OVERVIEW HIGHLIGHTS */}
+              <div className="grid grid-cols-4 gap-4 mb-6 shrink-0">
+                <div className="bg-slate-900 text-white rounded p-3.5 border border-slate-800 text-center flex flex-col justify-center">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">WBS 진척 현황</span>
+                  <strong className="text-xl font-mono font-black mt-1 text-emerald-400">
+                    {tasks.length > 0
+                      ? Math.round(tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length)
+                      : 0}%
+                  </strong>
+                  <span className="text-[9px] text-slate-400 font-mono mt-0.5">Weighted Progress</span>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded p-3.5 flex flex-col justify-center">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest text-center">PM & PMO OFFICE</span>
+                  <strong className="text-sm font-black text-slate-800 text-center mt-1">{project.pm}</strong>
+                  <span className="text-[9px] text-slate-400 font-mono text-center mt-0.5">PROJECT LEADER</span>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded p-3.5 flex flex-col justify-center col-span-2">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest pl-2">전체 개발 추진 기간</span>
+                  <div className="flex items-center justify-between px-2 mt-1">
+                    <span className="text-xs font-mono font-black text-slate-700">{project.startDate}</span>
+                    <span className="text-[10px] text-slate-400 font-bold">▶ ▶ ▶</span>
+                    <span className="text-xs font-mono font-black text-indigo-600">{project.endDate}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. CORE PRINTABLE GANTT TIMELINE MATRIX */}
+              <div className="border border-slate-900/90 rounded overflow-hidden bg-white">
+                {/* Visual Header Table */}
+                <div className="flex divide-x divide-slate-800 bg-slate-900 text-white text-xs font-bold font-sans">
+                  {/* Left Head */}
+                  <div className="w-[30%] p-3 flex items-center justify-between shrink-0 bg-slate-950">
+                    <span className="font-extrabold uppercase tracking-wide">단계 및 세부 업무 이름</span>
+                    <span className="text-[9px] font-normal text-slate-400">Owner | Progress</span>
+                  </div>
+                  
+                  {/* Right Monthly Timeline Bar Grids */}
+                  <div className="flex-1 flex divide-x divide-slate-800/60 bg-slate-900">
+                    {getGanttMonths().map((month, idx) => {
+                      const days = getDaysInMonthDateArray(month);
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col min-w-0 select-none">
+                          {/* Month top block */}
+                          <div className="py-2 text-center text-[11px] font-black tracking-widest text-slate-200 border-b border-slate-800 bg-slate-950">
+                            {month.getMonth() + 1}월 (Month)
+                          </div>
+                          {/* Day sub-head ticks */}
+                          <div className="flex justify-between px-1 py-1 text-[8px] font-mono font-bold text-slate-400 bg-slate-900 border-b border-slate-800">
+                            {days.map(day => {
+                              const isTargetDay = day === 1 || day % 5 === 0;
+                              return (
+                                <span key={day} className="flex-1 text-center scale-[0.8]">
+                                  {isTargetDay ? day : "·"}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Vertical table rows with task & timeline representation */}
+                <div className="divide-y divide-slate-900/60">
+                  {phases.map(phase => {
+                    const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === phase.id);
+                    const phaseColor = getPhaseColorMap(phase.color);
+                    
+                    return (
+                      <div key={phase.id} className="divide-y divide-slate-200">
+                        {/* Phase Segment Header Row */}
+                        <div className="flex bg-slate-50/80 font-bold border-b border-slate-350/65 flex-shrink-0">
+                          <div className="w-[30%] p-2.5 flex items-center shrink-0 border-r border-slate-900/40 bg-slate-100/75">
+                            <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                              📂 {phase.name} 단계
+                            </span>
+                          </div>
+                          <div className="flex-1 bg-slate-50/50 py-2.5 px-4 font-mono text-[10px] text-slate-500 font-extrabold tracking-wider">
+                            해당 단계 배속 세부 업무 개수: {phaseTasks.length}건
+                          </div>
+                        </div>
+
+                        {/* Task Gantt Rows inside this Phase */}
+                        {phaseTasks.length === 0 ? (
+                          <div className="flex text-slate-400 text-[10px] font-medium py-3 italic bg-white flex-shrink-0">
+                            <div className="w-[30%] px-6 border-r border-slate-200">배속된 업무 일정이 없습니다.</div>
+                            <div className="flex-1 text-center">Timeline empty</div>
+                          </div>
+                        ) : (
+                          phaseTasks.map(task => {
+                            const barPlacement = calculateTimelineBarPosition(task.startDate, task.endDate);
+                            const baseLeft = barPlacement.left;
+                            const baseWidth = barPlacement.width;
+                            
+                            // Lead time calculation
+                            const leadWidth = task.hasOrder && task.orderLeadTime 
+                              ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
+                              : 0;
+                            const leadLeft = baseLeft + baseWidth;
+
+                            return (
+                              <div key={task.id} className="flex bg-white hover:bg-slate-50/30 transition-all font-sans text-[10px] flex-shrink-0">
+                                {/* Left Section info */}
+                                <div className="w-[30%] p-2.5 flex flex-col justify-center border-r border-slate-900/40 shrink-0 font-sans">
+                                  <div className="flex items-start justify-between gap-1">
+                                    <strong className="text-slate-900 text-[10.5px] font-bold leading-normal truncate">{task.name}</strong>
+                                    <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-600 block font-mono shrink-0 font-bold">
+                                      {task.progress}%
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mt-1 pr-1 font-semibold">
+                                    <span>👤 HW: {task.owner || "미지정"}</span>
+                                    <span>{task.startDate} ~ {task.endDate}</span>
+                                  </div>
+                                </div>
+
+                                {/* Right Section: Timeline Bar Space */}
+                                <div className="flex-1 relative h-11 bg-white flex divide-x divide-slate-100/60 overflow-hidden font-mono">
+                                  {/* Draw standard visual column columns guidelines for reference */}
+                                  {getGanttMonths().map((_, mIdx) => (
+                                    <div key={mIdx} className="flex-1 h-full pointer-events-none border-r border-slate-100 last:border-r-0"></div>
+                                  ))}
+
+                                  {/* Real Gantt graphical bar plotted with CSS */}
+                                  <div
+                                    className="absolute h-5 rounded flex items-center justify-between pl-2 pr-1.5 border border-indigo-600/55 shadow-[0_1px_3px_rgba(0,0,0,0.04)] bg-gradient-to-r from-indigo-50 to-indigo-100/90 text-[8.5px] font-black text-indigo-900 z-10 overflow-hidden"
+                                    style={{
+                                      left: `${baseLeft}%`,
+                                      width: `${baseWidth}%`,
+                                      top: '9px'
+                                    }}
+                                  >
+                                    <span className="truncate">{task.progress}%</span>
+                                  </div>
+
+                                  {/* Lead Time guide rendering (if applicable) */}
+                                  {task.hasOrder && task.orderLeadTime > 0 && (
+                                    <div
+                                      className="absolute h-5 rounded border border-dashed border-amber-500 bg-amber-50/45 text-[8px] font-mono font-black text-amber-800 flex items-center justify-center px-1 z-10 animate-pulse text-center"
+                                      style={{
+                                        left: `${leadLeft}%`,
+                                        width: `${leadWidth}%`,
+                                        top: '9px'
+                                      }}
+                                    >
+                                      <span className="truncate">🚚 Lead:+{task.orderLeadTime}M</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 4. A3 FOOTER INFORMATION AND COMPLIANCE */}
+            <div className="mt-8 border-t border-slate-900/60 pt-4 flex justify-between items-end text-[9px] text-slate-400 font-mono shrink-0">
+              <div className="flex flex-col space-y-1">
+                <span>SYSTEM ORIGIN: 🌐 GOOGLE AI STUDIO ENTERPRISE CLOUD SUITE</span>
+                <span>SECURITY CLASS: 🔒 LEVEL-2 CONFIDENTIAL CORPORATE BLUEPRINT</span>
+              </div>
+              <div className="text-right flex flex-col space-y-1">
+                <span className="font-bold">A3 PORTRAIT SCALED PLANER v1.2</span>
+                <span>PAGE 01 / OF 01</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📟 ================= 8-2. A3 규격 가로 인쇄양식 (PDF) 모달 룸 ================= */}
+      {isA3LandscapePrintOpen && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex flex-col items-center justify-start py-8 px-4 overflow-y-auto print:p-0 print:bg-white animate-fadeIn">
+          {/* Print controls bar */}
+          <div className="w-full max-w-[420mm] bg-slate-900 border border-slate-800 text-white rounded-2xl px-6 py-4 mb-6 flex flex-wrap items-center justify-between gap-4 shadow-xl shrink-0 print:hidden">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center font-bold text-white shadow-md">
+                <Printer className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-100 flex items-center gap-2">
+                  <span>A3 가로 정식 인쇄 도면 양식 v1.5</span>
+                  <span className="text-[9px] bg-slate-800 border border-slate-700 font-mono tracking-wider font-extrabold px-1.5 py-0.5 rounded text-emerald-400">
+                    A3 LANDSCAPE 420x297mm
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  가로 와이드형 배치를 통하여 길고 정밀한 일정이 한눈에 자동 핏팅되는 고가시성 WBS 도면 양식입니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {/* 스마트 인쇄 배율 슬라이딩 콘트롤판 */}
+              <div className="flex items-center gap-2 bg-slate-800 border border-slate-750 px-3 py-1.5 rounded-xl">
+                <span className="text-[11px] text-slate-300 font-bold whitespace-nowrap">인쇄 미세배율 조정:</span>
+                <input 
+                  type="range" 
+                  min="55" 
+                  max="115"
+                  step="1"
+                  value={landscapePrintScale} 
+                  onChange={(e) => setLandscapePrintScale(Number(e.target.value))} 
+                  className="w-20 md:w-32 accent-emerald-500 cursor-pointer h-1 bg-slate-750 rounded-lg appearance-none" 
+                  title="일정이 다음 장으로 밀리거나 잘릴 경우 배율을 낮춰 한 페이지에 완전히 맞추세요."
+                />
+                <span className="text-[11px] font-mono font-black text-emerald-400 whitespace-nowrap w-10 text-right">{landscapePrintScale}%</span>
+                <button 
+                  onClick={() => {
+                    const monthCount = getGanttMonths().length;
+                    const autoScale = Math.min(100, Math.max(65, Math.round(100 - Math.max(0, monthCount - 5) * 5)));
+                    setLandscapePrintScale(autoScale);
+                  }}
+                  className="ml-1 text-[10px] text-indigo-400 hover:text-indigo-300 font-extrabold hover:underline"
+                >
+                  기본맞춤
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    window.print();
+                  }}
+                  className="px-4.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-lg shadow-emerald-600/30 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>PDF로 저장 및 도면 출력</span>
+                </button>
+                
+                <button
+                  onClick={() => setIsA3LandscapePrintOpen(false)}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <X className="w-4 h-4" />
+                  <span>양식 닫기</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Core A3 Landscape Printable Box Container */}
+          <div 
+            id="a3-landscape-print-area"
+            className="bg-white text-slate-900 w-[420mm] h-[297mm] p-[12mm] shadow-2xl border border-slate-300/80 rounded-lg relative flex flex-col justify-between overflow-hidden print:shadow-none print:border-none print:p-[8mm] print:m-0 print:w-[420mm] print:h-[297mm] bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] bg-[size:32px_32px]"
+          >
+            {/* Custom landscape print styles specialized inside compilation */}
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                @page {
+                  size: A3 landscape !important;
+                  margin: 0 !important;
+                }
+                body {
+                  background: white !important;
+                  color: black !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                #root > div, #root > div > main > * {
+                  display: none !important;
+                }
+                #a3-landscape-print-area, #a3-landscape-print-area * {
+                  display: block !important;
+                  visibility: visible !important;
+                }
+                #a3-landscape-print-area {
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 420mm !important;
+                  height: 297mm !important;
+                  padding: 8mm !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                  background: white !important;
+                  margin: 0 !important;
+                  box-sizing: border-box !important;
+                  overflow: hidden !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+                .force-flex {
+                  display: flex !important;
+                }
+              }
+            `}} />
+
+            {/* Scale-controlled inside graphics core wrapper */}
+            <div 
+              style={{
+                transform: `scale(${landscapePrintScale / 100})`,
+                transformOrigin: 'top left',
+                width: `${100 / (landscapePrintScale / 100)}%`,
+                height: `calc(${105 / (landscapePrintScale / 100)}% - 20px)`,
+                transition: 'transform 0.15s ease-out'
+              }}
+              className="flex flex-col justify-between h-full"
+            >
+              <div>
+                {/* 1. BLUEPRINT HEADER BLOCK */}
+                <div className="border border-slate-900/90 rounded overflow-hidden flex divide-x divide-slate-900/90 mb-5 shrink-0 bg-white shadow-sm">
+                  <div className="w-[190px] p-2.5 text-center flex flex-col justify-center bg-slate-50">
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">DOCUMENT CODE</span>
+                    <strong className="text-[13px] font-mono font-black text-emerald-800 mt-1">PROJ-WBS-A3L-WIDE</strong>
+                    <div className="border-t border-slate-900/15 my-1.5 pb-1"></div>
+                    <span className="text-[8px] font-black text-slate-455 uppercase tracking-widest leading-none">REVISION DATE</span>
+                    <strong className="text-xs font-mono font-bold text-slate-700 mt-0.5">2026-05-29 (금)</strong>
+                  </div>
+                  
+                  <div className="flex-1 p-3.5 flex flex-col justify-center items-start">
+                    <div className="text-[8.5px] font-black text-emerald-700 uppercase tracking-widest px-2 py-0.5 bg-emerald-50 border border-emerald-150 rounded-full mb-0.5">
+                      📂 LANDSCAPE WBS TIMELINE MASTERCHART
+                    </div>
+                    <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight leading-none mt-1">
+                      {project.title}
+                    </h1>
+                    <p className="text-[10px] text-slate-500 mt-1 font-medium leading-relaxed">
+                      본 계획서는 가로 와이드형 A3 판형 규격에 일정이 완비되도록 배팅 배율 최적화를 설계한 공식 승인 도면입니다.
+                    </p>
+                  </div>
+
+                  <div className="w-[300px] shrink-0 divide-x divide-slate-900/90 flex bg-white font-sans text-[10px]">
+                    <div className="w-1/3 flex flex-col text-center">
+                      <div className="py-1 border-b border-slate-900/90 bg-slate-100 font-bold text-slate-600">계 획</div>
+                      <div className="flex-grow flex items-center justify-center font-extrabold text-slate-800 p-1.5 leading-tight">
+                        {project.pm || "김PM"}
+                      </div>
+                    </div>
+                    <div className="w-1/3 flex flex-col text-center">
+                      <div className="py-1 border-b border-slate-900/90 bg-slate-100 font-bold text-slate-600">심 의</div>
+                      <div className="flex-grow flex items-center justify-center font-extrabold text-slate-400 p-1.5 text-[9px] italic">
+                        심의생략
+                      </div>
+                    </div>
+                    <div className="w-1/3 flex flex-col text-center">
+                      <div className="py-1 border-b border-slate-900/90 bg-slate-100 font-bold text-slate-600">승 인</div>
+                      <div className="flex-grow flex items-center justify-center font-black text-emerald-600 p-1.5 text-xs">
+                        APPROVED
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. PROJECT OVERVIEW HIGHLIGHTS */}
+                <div className="grid grid-cols-4 gap-4 mb-5 shrink-0">
+                  <div className="bg-slate-900 text-white rounded p-3 border border-slate-800 text-center flex flex-col justify-center">
+                    <span className="text-[8.5px] font-bold text-slate-400 tracking-widest">WBS 진척율 (평균 가중치)</span>
+                    <strong className="text-lg font-mono font-black mt-0.5 text-emerald-400">
+                      {tasks.length > 0
+                        ? Math.round(tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length)
+                        : 0}%
+                    </strong>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded p-3 flex flex-col justify-center text-center">
+                    <span className="text-[8.5px] font-bold text-slate-500 uppercase tracking-widest">총괄 기획 책임자</span>
+                    <strong className="text-sm font-black text-slate-800 mt-0.5">{project.pm}</strong>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded p-3 flex flex-col justify-center col-span-2 px-4">
+                    <span className="text-[8.5px] font-bold text-slate-500 uppercase tracking-widest">전체 개발 추진 타임마스터</span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs font-mono font-black text-slate-700">{project.startDate}</span>
+                      <span className="text-[9px] text-slate-300 font-bold tracking-widest">================▶</span>
+                      <span className="text-xs font-mono font-black text-emerald-600">{project.endDate}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. CORE PRINTABLE GANTT TIMELINE MATRIX */}
+                <div className="border border-slate-900/90 rounded overflow-hidden bg-white shadow-2xl">
+                  {/* Visual Header Table */}
+                  <div className="flex divide-x divide-slate-800 bg-slate-900 text-white text-xs font-bold font-sans">
+                    {/* Left Head: 가로에서는 25% 비율을 주어 타임라인 면적을 75%까지 확장시킨다 */}
+                    <div className="w-[25%] p-3 flex items-center justify-between shrink-0 bg-slate-950">
+                      <span className="font-extrabold uppercase tracking-wide text-[11px]">대구분 단계 및 세부 태스크</span>
+                      <span className="text-[8.5px] font-normal text-slate-400">HW / %</span>
+                    </div>
+                    
+                    {/* Right Monthly Timeline Bar Grids */}
+                    <div className="flex-1 flex divide-x divide-slate-800/60 bg-slate-900">
+                      {getGanttMonths().map((month, idx) => {
+                        const days = getDaysInMonthDateArray(month);
+                        return (
+                          <div key={idx} className="flex-1 flex flex-col min-w-0 select-none">
+                            {/* Month top block */}
+                            <div className="py-1.5 text-center text-[10px] font-black tracking-widest text-slate-200 border-b border-slate-800 bg-slate-950">
+                              {month.getMonth() + 1}월
+                            </div>
+                            {/* Day sub-head ticks */}
+                            <div className="flex justify-between px-1 py-1 text-[7.5px] font-mono font-bold text-slate-400 bg-slate-900 border-b border-slate-800 animate-pulse">
+                              {days.map(day => {
+                                const isTargetDay = day === 1 || day % 5 === 0;
+                                return (
+                                  <span key={day} className="flex-1 text-center scale-[0.8] leading-none">
+                                    {isTargetDay ? day : "·"}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Vertical table rows with task & timeline representation */}
+                  <div className="divide-y divide-slate-900/60">
+                    {phases.map(phase => {
+                      const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === phase.id);
+                      
+                      return (
+                        <div key={phase.id} className="divide-y divide-slate-100">
+                          {/* Phase Segment Header Row */}
+                          <div className="flex bg-slate-50/90 font-bold border-b border-slate-350/65 flex-shrink-0">
+                            <div className="w-[25%] p-2 flex items-center shrink-0 border-r border-slate-900/40 bg-slate-100/75 shadow-inner">
+                              <span className="text-[10px] font-black text-slate-900 flex items-center gap-1.5">
+                                🟩 {phase.name} Phase
+                              </span>
+                            </div>
+                            <div className="flex-grow bg-slate-55/40 py-2 px-4 font-mono text-[9px] text-slate-500 font-bold tracking-wider">
+                              세부 일정 개수: {phaseTasks.length}건
+                            </div>
+                          </div>
+
+                          {/* Task Gantt Rows inside this Phase */}
+                          {phaseTasks.length === 0 ? (
+                            <div className="flex text-slate-400 text-[9.5px] font-medium py-3.5 italic bg-white flex-shrink-0">
+                              <div className="w-[25%] px-6 border-r border-slate-200">배정된 하위 태스크가 생성되지 않음</div>
+                              <div className="flex-grow text-center">Empty Master Timeline</div>
+                            </div>
+                          ) : (
+                            phaseTasks.map(task => {
+                              const barPlacement = calculateTimelineBarPosition(task.startDate, task.endDate);
+                              const baseLeft = barPlacement.left;
+                              const baseWidth = barPlacement.width;
+                              
+                              // Lead time calculation
+                              const leadWidth = task.hasOrder && task.orderLeadTime 
+                                ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
+                                : 0;
+                              const leadLeft = baseLeft + baseWidth;
+
+                              return (
+                                <div key={task.id} className="flex bg-white hover:bg-slate-50/10 transition-colors font-sans text-[10px] flex-shrink-0">
+                                  {/* Left Section info */}
+                                  <div className="w-[25%] p-2 flex flex-col justify-center border-r border-slate-900/40 shrink-0 font-sans">
+                                    <div className="flex items-start justify-between gap-1 w-full">
+                                      <strong className="text-slate-900 text-[10px] font-bold leading-normal truncate max-w-[200px]">{task.name}</strong>
+                                      <span className="text-[8.5px] px-1 bg-slate-100 rounded text-slate-600 block font-mono shrink-0 font-black">
+                                        {task.progress}%
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[8px] text-slate-400 font-mono mt-1.5 pr-1 font-semibold">
+                                      <span>👤 자원: {task.owner || "미배정"}</span>
+                                      <span>{task.startDate} ~ {task.endDate}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Right Section: Timeline Bar Space */}
+                                  <div className="flex-grow flex-1 relative h-9.5 bg-white flex divide-x divide-slate-100/40 overflow-hidden font-mono">
+                                    {/* Draw grid columns for reference points */}
+                                    {getGanttMonths().map((_, mIdx) => (
+                                      <div key={mIdx} className="flex-1 h-full pointer-events-none border-r border-slate-105/50 last:border-r-0"></div>
+                                    ))}
+
+                                    {/* Real Gantt timeline graphical bar */}
+                                    <div
+                                      className="absolute h-4.5 rounded flex items-center justify-between pl-2 pr-1.5 border border-emerald-600/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] bg-gradient-to-r from-emerald-50 to-emerald-100/90 text-[8px] font-black text-emerald-950 z-10 overflow-hidden"
+                                      style={{
+                                        left: `${baseLeft}%`,
+                                        width: `${baseWidth}%`,
+                                        top: '7px'
+                                      }}
+                                    >
+                                      <span className="truncate">{task.progress}%</span>
+                                    </div>
+
+                                    {/* Lead Time guide rendering (if applicable) */}
+                                    {task.hasOrder && task.orderLeadTime > 0 && (
+                                      <div
+                                        className="absolute h-4.5 rounded border border-dashed border-amber-500 bg-amber-50/50 text-[7.5px] font-mono font-bold text-amber-800 flex items-center justify-center px-1 z-10 text-center animate-pulse"
+                                        style={{
+                                          left: `${leadLeft}%`,
+                                          width: `${leadWidth}%`,
+                                          top: '7px'
+                                        }}
+                                      >
+                                        <span className="truncate">🚚 납기:+{task.orderLeadTime}M</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. A3 FOOTER INFORMATION AND COMPLIANCE */}
+              <div className="border-t border-slate-900/60 pt-3 flex justify-between items-end text-[8.5px] text-slate-400 font-mono shrink-0 mb-2">
+                <div className="flex flex-col space-y-0.5">
+                  <span>SYSTEM DATA STREAM: 🌐 SECURED ENTERPRISE COGNITIVE CLOUD</span>
+                  <span>SECURITY CLASS: 🔒 LEVEL-2 CONFIDENTIAL INTERNAL Blueprints</span>
+                </div>
+                <div className="text-right flex flex-col space-y-0.5">
+                  <span className="font-extrabold text-[9px] text-slate-600">A3 LANDSCAPE AUTOMATIC FITMASTER SCALE v1.5</span>
+                  <span>PAGE 01 / OF 01</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
