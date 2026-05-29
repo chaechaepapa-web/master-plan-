@@ -584,6 +584,77 @@ export default function App() {
   };
 
   // --- 발주품 예상 납기(리드타임) 연장 바 폭 계산 엔진 ---
+  const getTimelineDateRange = () => {
+    // Base range is project start and end dates
+    let startMs = new Date(project.startDate).getTime();
+    let endMs = new Date(project.endDate).getTime();
+
+    if (isNaN(startMs)) startMs = new Date("2026-06-01").getTime();
+    if (isNaN(endMs)) endMs = new Date("2026-12-31").getTime();
+
+    // Check all tasks
+    tasks.forEach(t => {
+      if (t.startDate) {
+        const tStart = new Date(t.startDate).getTime();
+        if (!isNaN(tStart) && tStart < startMs) {
+          startMs = tStart;
+        }
+      }
+      if (t.endDate) {
+        const tEnd = new Date(t.endDate).getTime();
+        if (!isNaN(tEnd)) {
+          if (tEnd > endMs) {
+            endMs = tEnd;
+          }
+          // If there is order lead time, consider that as well
+          if (t.hasOrder && t.orderLeadTime) {
+            const d = new Date(t.endDate);
+            d.setMonth(d.getMonth() + t.orderLeadTime);
+            const deliveryMs = d.getTime();
+            if (!isNaN(deliveryMs) && deliveryMs > endMs) {
+              endMs = deliveryMs;
+            }
+          }
+        }
+      }
+    });
+
+    // Check all milestones
+    milestones.forEach(m => {
+      if (m.targetDate) {
+        const mDate = new Date(m.targetDate).getTime();
+        if (!isNaN(mDate)) {
+          if (mDate < startMs) startMs = mDate;
+          if (mDate > endMs) endMs = mDate;
+        }
+      }
+    });
+
+    // Convert back to YYYY-MM-DD
+    const dStart = new Date(startMs);
+    const dEnd = new Date(endMs);
+
+    const startYear = dStart.getFullYear();
+    const startMonth = dStart.getMonth();
+    const endYear = dEnd.getFullYear();
+    const endMonth = dEnd.getMonth();
+
+    const formatDigit = (num: number) => num < 10 ? `0${num}` : `${num}`;
+    
+    // start is the 1st day of the earliest month
+    const adjustedStart = `${startYear}-${formatDigit(startMonth + 1)}-01`;
+    // end is the 1st day of the month AFTER the latest month
+    const nextMonthDate = new Date(endYear, endMonth + 1, 1);
+    const adjustedEnd = `${endYear}-${formatDigit(endMonth + 1)}-${formatDigit(new Date(endYear, endMonth + 1, 0).getDate())}`;
+
+    return { 
+      startDate: adjustedStart, 
+      endDate: adjustedEnd,
+      startMs: new Date(adjustedStart).getTime(),
+      endMs: nextMonthDate.getTime()
+    };
+  };
+
   const getDeliveryDate = (endDateStr: string, leadTimeMonths: number) => {
     try {
       const d = new Date(endDateStr);
@@ -596,8 +667,9 @@ export default function App() {
   };
 
   const getLeadTimeWidthPercent = (endDateStr: string, leadTimeMonths: number) => {
-    const projStart = new Date(project.startDate).getTime();
-    const projEnd = new Date(project.endDate).getTime();
+    const range = getTimelineDateRange();
+    const projStart = range.startMs;
+    const projEnd = range.endMs;
     const totalDuration = projEnd - projStart;
     if (totalDuration <= 0) return 0;
 
@@ -617,8 +689,9 @@ export default function App() {
 
   // --- 타임라인 바 가로 백분율 위치 연산 엔진 ---
   const calculateTimelineBarPosition = (startStr: string, endStr: string) => {
-    const projStart = new Date(project.startDate).getTime();
-    const projEnd = new Date(project.endDate).getTime();
+    const range = getTimelineDateRange();
+    const projStart = range.startMs;
+    const projEnd = range.endMs;
     let taskStart = new Date(startStr).getTime();
     let taskEnd = new Date(endStr).getTime();
 
@@ -665,8 +738,9 @@ export default function App() {
 
   // --- 간트 개월 헤더 배열 계산 ---
   const getGanttMonths = () => {
-    const start = new Date(project.startDate);
-    const end = new Date(project.endDate);
+    const range = getTimelineDateRange();
+    const start = new Date(range.startDate);
+    const end = new Date(range.endDate);
     const months: Date[] = [];
     const current = new Date(start.getFullYear(), start.getMonth(), 1);
 
@@ -2693,8 +2767,9 @@ export default function App() {
                       {(() => {
                         if (!showMilestonesOnGantt) return null;
 
-                        const projStart = new Date(project.startDate).getTime();
-                        const projEnd = new Date(project.endDate).getTime();
+                        const range = getTimelineDateRange();
+                        const projStart = range.startMs;
+                        const projEnd = range.endMs;
                         const totalSpan = projEnd - projStart;
 
                         const positionedMilestones = milestones.map(m => {
@@ -3435,8 +3510,9 @@ export default function App() {
                     {(() => {
                       if (!showMilestonesOnGantt) return null;
 
-                      const projStart = new Date(project.startDate).getTime();
-                      const projEnd = new Date(project.endDate).getTime();
+                      const range = getTimelineDateRange();
+                      const projStart = range.startMs;
+                      const projEnd = range.endMs;
                       const totalSpan = projEnd - projStart;
 
                       const positionedMilestones = milestones.map(m => {
@@ -3676,8 +3752,9 @@ export default function App() {
                   {milestones
                     .sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime())
                     .map((m, idx) => {
-                      const projStart = new Date(project.startDate).getTime();
-                      const projEnd = new Date(project.endDate).getTime();
+                      const range = getTimelineDateRange();
+                      const projStart = range.startMs;
+                      const projEnd = range.endMs;
                       const milestoneTime = new Date(m.targetDate).getTime();
                       const totalSpan = projEnd - projStart;
                       
