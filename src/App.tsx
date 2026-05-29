@@ -430,6 +430,17 @@ export default function App() {
   };
 
   // --- 발주품 예상 납기(리드타임) 연장 바 폭 계산 엔진 ---
+  const getDeliveryDate = (endDateStr: string, leadTimeMonths: number) => {
+    try {
+      const d = new Date(endDateStr);
+      if (!isNaN(d.getTime())) {
+        d.setMonth(d.getMonth() + leadTimeMonths);
+        return d.toISOString().split("T")[0];
+      }
+    } catch (e) {}
+    return endDateStr;
+  };
+
   const getLeadTimeWidthPercent = (endDateStr: string, leadTimeMonths: number) => {
     const projStart = new Date(project.startDate).getTime();
     const projEnd = new Date(project.endDate).getTime();
@@ -513,6 +524,17 @@ export default function App() {
       safetyCounter++;
     }
     return months;
+  };
+
+  const getDaysInMonthDateArray = (monthDate: Date) => {
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const numDays = new Date(year, month + 1, 0).getDate();
+    const days: number[] = [];
+    for (let i = 1; i <= numDays; i++) {
+      days.push(i);
+    }
+    return days;
   };
 
   // --- 프로젝트 관리 및 전환 핸들러 ---
@@ -2350,7 +2372,7 @@ export default function App() {
                       onChange={(e) => setShowMilestonesOnGantt(e.target.checked)}
                       className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
-                    <span>목표 이정표 표출</span>
+                    <span>목표일 및 납기일정 표기</span>
                   </label>
                   
                   <label className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm cursor-pointer hover:bg-slate-50 transition-colors">
@@ -2378,7 +2400,7 @@ export default function App() {
                {/* 간트 스케줄 메인 스페이스 */}
               {ganttViewMode === "grid" ? (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto w-full custom-scrollbar">
+                  <div className={`w-full custom-scrollbar overflow-auto ${isCleanView ? '' : 'max-h-[600px]'}`}>
                     <div className="min-w-[1240px] flex flex-col relative">
                       
                       {/* 마일스톤 오버레이 시각화 가이드라인 */}
@@ -2440,11 +2462,25 @@ export default function App() {
                             <span>{project.startDate}</span>
                           </div>
 
-                          {getGanttMonths().map((month, idx) => (
-                            <div key={idx} className="flex-1 py-4 text-center text-xs font-bold text-slate-500 border-r border-slate-100 last:border-r-0 bg-white">
-                              {month.getMonth() + 1}월
-                            </div>
-                          ))}
+                          {getGanttMonths().map((month, idx) => {
+                            const days = getDaysInMonthDateArray(month);
+                            return (
+                              <div key={idx} className="flex-1 border-r border-slate-100 last:border-r-0 bg-white flex flex-col justify-between select-none">
+                                {/* 1행: 월 */}
+                                <div className="py-2 text-center text-xs font-black text-slate-600 bg-slate-50/50 border-b border-slate-100/60 flex-1 flex items-center justify-center">
+                                  {month.getMonth() + 1}월
+                                </div>
+                                {/* 2행: 일 */}
+                                <div className="flex justify-between px-1 py-1.5 text-[8px] font-mono font-medium text-slate-400/80 bg-white/95">
+                                  {days.map(day => (
+                                    <span key={day} className="flex-1 text-center text-[7.5px] scale-[0.85] leading-none min-w-[2px]">
+                                      {day}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
 
                           {/* 종료일 라벨 */}
                           <div className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
@@ -2767,29 +2803,20 @@ export default function App() {
                                         );
                                       })()}
 
-                                      {/* 이정표 (Milestone) 각 항목의 진척률 그래프 끝 무렵 적절한 위치 배정 */}
-                                      {getTaskMilestones(task).map((m, mIdx) => {
-                                        const isDone = m.status === "완료";
-                                        const isWorking = m.status === "진행";
-                                        const iconColor = isDone ? "text-emerald-500 fill-emerald-500" : isWorking ? "text-indigo-500 fill-indigo-500" : "text-amber-500 fill-amber-500";
-                                        const badgeColor = isDone
-                                          ? "border-emerald-200 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100/50"
-                                          : isWorking
-                                          ? "border-indigo-200 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-100/50"
-                                          : "border-amber-200 bg-amber-50 text-amber-800 ring-1 ring-amber-100/50";
-                                        
+                                      {/* 완료 목표일 및 발주 리드타임 납기일정 표기 바 */}
+                                      {showMilestonesOnGantt && (() => {
                                         const baseLeft = barPlacement.left + barPlacement.width;
                                         const leadWidth = task.hasOrder && task.orderLeadTime && showOrderLeadTimeOnGantt 
                                           ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
                                           : 0;
                                         
-                                        let milestoneLeft = baseLeft + leadWidth + (mIdx * 12);
+                                        const badgeLeft = baseLeft + leadWidth;
                                         let offsetStyle: React.CSSProperties = {
-                                          left: `${milestoneLeft}%`,
+                                          left: `${badgeLeft}%`,
                                           top: '12px',
                                           transform: 'translateX(6px)'
                                         };
-                                        if (milestoneLeft > 85) {
+                                        if (badgeLeft > 80) {
                                           const rightPct = 100 - (baseLeft + leadWidth);
                                           offsetStyle = {
                                             right: `${rightPct}%`,
@@ -2798,20 +2825,28 @@ export default function App() {
                                           };
                                         }
 
+                                        const deliveryDateStr = task.hasOrder && task.orderLeadTime 
+                                          ? getDeliveryDate(task.endDate, task.orderLeadTime)
+                                          : null;
+
                                         return (
                                           <div
-                                            key={m.id}
-                                            onClick={() => handleEditMilestone(m)}
-                                            title={`🚩 이정표: ${m.name} (${m.targetDate}) [상태: ${m.status}]`}
-                                            className={`absolute h-7 rounded-full border shadow-sm flex items-center space-x-1.5 px-3 py-1 cursor-pointer hover:scale-105 active:scale-95 hover:z-30 transition-all duration-150 text-[10px] font-black z-20 ${badgeColor}`}
+                                            onClick={() => handleEditTask(task)}
+                                            title={`🎯 완료 목표일: ${task.endDate}${deliveryDateStr ? ` | 🚚 납기 일정: ${deliveryDateStr}` : ""}`}
+                                            className="absolute h-7 rounded-xl border border-indigo-200/80 bg-indigo-50/95 text-indigo-900 shadow-sm flex items-center space-x-1.5 px-3 py-1 cursor-pointer hover:scale-105 active:scale-95 hover:z-30 transition-all duration-150 text-[10px] font-black z-20 whitespace-nowrap"
                                             style={offsetStyle}
                                           >
-                                            <Flag className={`w-3 h-3 ${iconColor}`} />
-                                            <span className="truncate max-w-[125px]">{m.name}</span>
-                                            <span className="text-[8px] opacity-80 font-bold whitespace-nowrap">({m.targetDate.substring(5)})</span>
+                                            <CalendarDays className="w-3.5 h-3.5 text-indigo-500" />
+                                            <span>🎯 완료: {task.endDate}</span>
+                                            {deliveryDateStr && (
+                                              <>
+                                                <span className="text-indigo-300 font-normal">|</span>
+                                                <span className="text-amber-800">🚚 납기: {deliveryDateStr}</span>
+                                              </>
+                                            )}
                                           </div>
                                         );
-                                      })}
+                                      })()}
 
                                       {/* 도형 바로 아래 텍스트 (줄바꿈 없이 노출) */}
                                       <div
@@ -3173,11 +3208,25 @@ export default function App() {
                         <span>{project.startDate}</span>
                       </div>
 
-                      {getGanttMonths().map((month, idx) => (
-                        <div key={idx} className="flex-1 py-4 text-center text-xs font-bold text-slate-500 border-r border-slate-100 last:border-r-0 bg-white">
-                          {month.getMonth() + 1}월
-                        </div>
-                      ))}
+                      {getGanttMonths().map((month, idx) => {
+                        const days = getDaysInMonthDateArray(month);
+                        return (
+                          <div key={idx} className="flex-1 border-r border-slate-100 last:border-r-0 bg-white flex flex-col justify-between select-none">
+                            {/* 1행: 월 */}
+                            <div className="py-2 text-center text-xs font-black text-slate-600 bg-slate-50/50 border-b border-slate-100/60 flex-1 flex items-center justify-center">
+                              {month.getMonth() + 1}월
+                            </div>
+                            {/* 2행: 일 */}
+                            <div className="flex justify-between px-1 py-1.5 text-[8px] font-mono font-medium text-slate-400/80 bg-white/95">
+                              {days.map(day => (
+                                <span key={day} className="flex-1 text-center text-[7.5px] scale-[0.85] leading-none min-w-[2px]">
+                                  {day}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
 
                       {/* 종료일 라벨 */}
                       <div className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
@@ -3244,29 +3293,20 @@ export default function App() {
                                     );
                                   })()}
 
-                                  {/* 이정표 (Milestone) 각 항목의 진척률 그래프 끝 무렵 적절한 위치 배정 */}
-                                  {getTaskMilestones(task).map((m, mIdx) => {
-                                    const isDone = m.status === "완료";
-                                    const isWorking = m.status === "진행";
-                                    const iconColor = isDone ? "text-emerald-500 fill-emerald-500" : isWorking ? "text-indigo-500 fill-indigo-500" : "text-amber-500 fill-amber-500";
-                                    const badgeColor = isDone
-                                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100/50"
-                                      : isWorking
-                                      ? "border-indigo-200 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-100/50"
-                                      : "border-amber-200 bg-amber-50 text-amber-800 ring-1 ring-amber-100/50";
-                                    
+                                  {/* 완료 목표일 및 발주 리드타임 납기일정 표기 바 */}
+                                  {showMilestonesOnGantt && (() => {
                                     const baseLeft = barPlacement.left + barPlacement.width;
                                     const leadWidth = task.hasOrder && task.orderLeadTime && showOrderLeadTimeOnGantt 
                                       ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
                                       : 0;
                                     
-                                    let milestoneLeft = baseLeft + leadWidth + (mIdx * 12);
+                                    const badgeLeft = baseLeft + leadWidth;
                                     let offsetStyle: React.CSSProperties = {
-                                      left: `${milestoneLeft}%`,
+                                      left: `${badgeLeft}%`,
                                       top: '12px',
                                       transform: 'translateX(6px)'
                                     };
-                                    if (milestoneLeft > 85) {
+                                    if (badgeLeft > 80) {
                                       const rightPct = 100 - (baseLeft + leadWidth);
                                       offsetStyle = {
                                         right: `${rightPct}%`,
@@ -3275,20 +3315,28 @@ export default function App() {
                                       };
                                     }
 
+                                    const deliveryDateStr = task.hasOrder && task.orderLeadTime 
+                                      ? getDeliveryDate(task.endDate, task.orderLeadTime)
+                                      : null;
+
                                     return (
                                       <div
-                                        key={m.id}
-                                        onClick={() => handleEditMilestone(m)}
-                                        title={`🚩 이정표: ${m.name} (${m.targetDate}) [상태: ${m.status}]`}
-                                        className={`absolute h-7 rounded-full border shadow-sm flex items-center space-x-1.5 px-3 py-1 cursor-pointer hover:scale-105 active:scale-95 hover:z-30 transition-all duration-150 text-[10px] font-black z-20 ${badgeColor}`}
+                                        onClick={() => handleEditTask(task)}
+                                        title={`🎯 완료 목표일: ${task.endDate}${deliveryDateStr ? ` | 🚚 납기 일정: ${deliveryDateStr}` : ""}`}
+                                        className="absolute h-7 rounded-xl border border-indigo-200/80 bg-indigo-50/95 text-indigo-900 shadow-sm flex items-center space-x-1.5 px-3 py-1 cursor-pointer hover:scale-105 active:scale-95 hover:z-30 transition-all duration-150 text-[10px] font-black z-20 whitespace-nowrap"
                                         style={offsetStyle}
                                       >
-                                        <Flag className={`w-3 h-3 ${iconColor}`} />
-                                        <span className="truncate max-w-[125px]">{m.name}</span>
-                                        <span className="text-[8px] opacity-80 font-bold whitespace-nowrap">({m.targetDate.substring(5)})</span>
+                                        <CalendarDays className="w-3.5 h-3.5 text-indigo-500" />
+                                        <span>🎯 완료: {task.endDate}</span>
+                                        {deliveryDateStr && (
+                                          <>
+                                            <span className="text-indigo-300 font-normal">|</span>
+                                            <span className="text-amber-800">🚚 납기: {deliveryDateStr}</span>
+                                          </>
+                                        )}
                                       </div>
                                     );
-                                  })}
+                                  })()}
 
                                   {/* 도형 바로 아래 텍스트 (줄바꿈 없이 노출) */}
                                   <div
