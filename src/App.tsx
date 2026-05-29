@@ -252,6 +252,9 @@ export default function App() {
   const [showMilestonesOnGantt, setShowMilestonesOnGantt] = useState<boolean>(true);
   const [showOrderLeadTimeOnGantt, setShowOrderLeadTimeOnGantt] = useState<boolean>(true);
   const [toast, setToast] = useState<{ show: boolean; msg: string }>({ show: false, msg: "" });
+  
+  // --- 간트 차트 뷰 모드 제어 상태 ("grid" = 행 완벽 정렬 뷰, "split" = 분리형 스크롤 뷰) ---
+  const [ganttViewMode, setGanttViewMode] = useState<"grid" | "split">("grid");
 
   // ✏️ 편집 모드 및 커스텀 레이블 텍스트 상태 영속 제어
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
@@ -468,6 +471,31 @@ export default function App() {
     if (leftPercent + widthPercent > 100) widthPercent = 100 - leftPercent;
 
     return { left: leftPercent, width: widthPercent };
+  };
+
+  const getTaskMilestones = (task: Task) => {
+    if (!showMilestonesOnGantt) return [];
+    return milestones.filter(m => {
+      let bestTask = tasks.find(t => t.endDate === m.targetDate);
+      if (!bestTask) {
+        bestTask = tasks.find(t => t.startDate <= m.targetDate && t.endDate >= m.targetDate);
+      }
+      if (!bestTask && tasks.length > 0) {
+        const mTime = new Date(m.targetDate).getTime();
+        let minDiff = Infinity;
+        let closest = tasks[0];
+        for (const t of tasks) {
+          const tEnd = new Date(t.endDate).getTime();
+          const diff = Math.abs(tEnd - mTime);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = t;
+          }
+        }
+        bestTask = closest;
+      }
+      return bestTask && bestTask.id === task.id;
+    });
   };
 
   // --- 간트 개월 헤더 배열 계산 ---
@@ -2070,11 +2098,19 @@ export default function App() {
         </div>
 
         {/* 탭 가변 뷰 스페이스 */}
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar font-sans">
+        <div className={`flex-grow ${isCleanView ? 'p-12 space-y-16' : 'p-8 space-y-8'} overflow-y-auto custom-scrollbar font-sans bg-slate-50/20`}>
           
           {/* ================= 탭 1: 종합 진단 요약 (대시보드) ================= */}
-          {activeTab === "dashboard" && (
+          {(isCleanView || activeTab === "dashboard") && (
             <div className="space-y-8 animate-fadeIn">
+              {isCleanView && (
+                <div className="border-b-2 border-slate-900 pb-3.5 mt-4">
+                  <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                    <span className="bg-slate-900 text-white rounded-lg text-xs px-3 py-1 font-mono tracking-widest">SECTION 1</span>
+                    <span className="tracking-tight text-slate-800">📊 종합 진단 요약 (Executive Health Dashboard)</span>
+                  </h3>
+                </div>
+              )}
               
               {/* 스펙 진단 위젯 보드 */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2156,20 +2192,22 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 
                 {/* 다가오는 이정표 리스트 */}
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[400px]">
+                <div className={`bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col ${isCleanView ? 'h-auto' : 'h-[400px]'}`}>
                   <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                       <Flag className="w-4.5 h-4.5 text-indigo-500" />
                       <span>이정표 및 리스크 신뢰성</span>
                     </h3>
-                    <button
-                      onClick={() => setActiveTab("milestones")}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-                    >
-                      전체보기
-                    </button>
+                    {!isCleanView && (
+                      <button
+                        onClick={() => setActiveTab("milestones")}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      >
+                        전체보기
+                      </button>
+                    )}
                   </div>
-                  <div className="p-6 flex-1 overflow-y-auto space-y-4 custom-scrollbar">
+                  <div className={`p-6 flex-1 ${isCleanView ? '' : 'overflow-y-auto max-h-[400px]'} space-y-4 custom-scrollbar`}>
                     {[...milestones]
                       .sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime())
                       .map(m => {
@@ -2193,11 +2231,10 @@ export default function App() {
                               <span className="text-xs text-slate-400 font-semibold">{m.targetDate}</span>
                             </div>
                             <div className="flex items-center space-x-3 mt-1.5">
-                              <span className="text-[10px] text-slate-400 font-semibold w-12 text-right uppercase tracking-wider">Conf.</span>
-                              <div className="flex-1 bg-slate-200 h-2 rounded-full overflow-hidden">
-                                <div className={`${progressBg} h-2 rounded-full transition-all duration-500`} style={{ width: `${confidence}%` }}></div>
+                              <div className="flex-1 bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                                <div className={`h-1.5 rounded-full ${progressBg} transition-all duration-500`} style={{ width: `${confidence}%` }}></div>
                               </div>
-                              <span className={`text-xs font-bold w-10 text-right ${confidence < 60 ? "text-rose-600" : "text-slate-700"}`}>{confidence}%</span>
+                              <span className="text-[10px] font-bold text-slate-500 shrink-0 w-8 text-right">신뢰도 {confidence}%</span>
                             </div>
                           </div>
                         );
@@ -2205,61 +2242,60 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Top 5 활성 위험 요소 */}
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[400px]">
+                {/* 실시간 리스크 탑 프로파일링 요약 */}
+                <div className={`bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col ${isCleanView ? 'h-auto' : 'h-[400px]'}`}>
                   <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                       <AlertTriangle className="w-4.5 h-4.5 text-rose-500" />
-                      <span>핵심 요주 위험 순위 (Top 5 Risks)</span>
+                      <span>핵심 고위험 리스크 레지스터 (Top Risks)</span>
                     </h3>
-                    <button
-                      onClick={() => setActiveTab("risks")}
-                      className="text-xs font-semibold text-rose-600 hover:text-rose-800 cursor-pointer"
-                    >
-                      리스크 관리로 이동
-                    </button>
+                    {!isCleanView && (
+                      <button
+                        onClick={() => setActiveTab("risks")}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      >
+                        전체보기
+                      </button>
+                    )}
                   </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar">
+                  <div className={`p-6 flex-1 ${isCleanView ? '' : 'overflow-y-auto max-h-[400px]'} space-y-4 custom-scrollbar`}>
                     {risks.filter(r => r.status !== "Closed").length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                        <CheckCircle2 className="w-12 h-12 text-emerald-400 mb-2" />
-                        <p className="text-sm font-medium">활성화되거나 제어 불가 사태인 리스크 위협이 없습니다.</p>
+                      <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-400 mb-2" />
+                        <p className="text-xs font-bold text-slate-500">지연 또는 병목 위협 중인 리스크 요인이 없습니다.</p>
+                        <p className="text-[10px] text-slate-400 mt-1">모든 시스템 안정 및 안정적 진척 신뢰성 달성 완료</p>
                       </div>
                     ) : (
-                      <ul className="divide-y divide-slate-100">
-                        {risks
-                          .filter(r => r.status !== "Closed")
-                          .sort((a, b) => getRiskScore(b.prob, b.impact) - getRiskScore(a.prob, a.impact))
-                          .slice(0, 5)
-                          .map(r => {
-                            const score = getRiskScore(r.prob, r.impact);
-                            const badgeColor = score >= 15
-                              ? "bg-rose-50 text-rose-700 border-rose-200/60"
-                              : score >= 8
-                              ? "bg-amber-50 text-amber-700 border-amber-200/60"
-                              : "bg-slate-50 text-slate-600 border-slate-200/60";
-                            const mappingMs = milestones.find(m => m.id === r.msId)?.name || "특정 이정표 없음";
-                            return (
-                              <li key={r.id} className="p-4.5 hover:bg-slate-50/70 transition-colors flex items-start space-x-4">
-                                <div className={`flex-shrink-0 px-3 py-1.5 rounded-xl border ${badgeColor} text-center min-w-[56px] shadow-sm`}>
-                                  <p className="text-[9px] uppercase font-bold opacity-70 tracking-widest">위협</p>
-                                  <p className="text-lg font-extrabold">{score}</p>
+                      risks
+                        .filter(r => r.status !== "Closed")
+                        .sort((a, b) => getRiskScore(b.prob, b.impact) - getRiskScore(a.prob, a.impact))
+                        .map(r => {
+                          const score = getRiskScore(r.prob, r.impact);
+                          const severityColor = score >= 15 ? "text-rose-600 bg-rose-50 border-rose-100 font-extrabold" : score >= 8 ? "text-amber-700 bg-amber-50 border-amber-100 font-extrabold" : "text-slate-600 bg-slate-100 border-slate-200 font-bold";
+                          const targetMsName = milestones.find(m => m.id === r.msId)?.name || "특정 영역 한정 해제";
+
+                          return (
+                            <div key={r.id} className="p-4 bg-slate-50/80 border border-slate-200/65 rounded-xl flex items-center justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border leading-none ${severityColor}`}>
+                                    위험지수 {score}
+                                  </span>
+                                  <p className="text-xs font-semibold text-slate-800 truncate" title={r.title}>{r.title}</p>
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                  <h4 className="text-sm font-bold text-slate-800 truncate tracking-tight">{r.title}</h4>
-                                  <p className="text-xs text-slate-400 my-1 flex items-center gap-1">
-                                    <Flag className="w-3.5 h-3.5 shrink-0" />
-                                    <span className="truncate">{mappingMs}</span>
-                                  </p>
-                                  <p className="text-xs text-indigo-600 font-semibold truncate flex items-center gap-1">
-                                    <ShieldCheck className="w-3.5 h-3.5" />
-                                    <span>{r.strategy}: {r.mitigation || "-"}</span>
-                                  </p>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
+                                  <span className="font-bold text-slate-500">연동 기점:</span>
+                                  <span className="truncate">{targetMsName}</span>
                                 </div>
-                              </li>
-                            );
-                          })}
-                      </ul>
+                              </div>
+                              <span className={`text-[10px] font-black px-2 py-1 rounded-full ${
+                                r.status === "Active" ? "bg-rose-100 text-rose-700 font-extrabold" : "bg-amber-100 text-amber-800 font-extrabold"
+                              } shrink-0`}>
+                                {r.status}
+                              </span>
+                            </div>
+                          );
+                        })
                     )}
                   </div>
                 </div>
@@ -2269,340 +2305,819 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= 탭 2: 간트 마스터플랜 ================= */}
-          {activeTab === "gantt" && (
+          {/* ================= 탭 2: 간트 차트 (일정 & 연동 관리) ================= */}
+          {(isCleanView || activeTab === "gantt") && (
             <div className="space-y-6 animate-fadeIn">
+              {isCleanView && (
+                <div className="border-b-2 border-slate-900 pb-3.5 mt-8">
+                  <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                    <span className="bg-slate-900 text-white rounded-lg text-xs px-3 py-1 font-mono tracking-widest">SECTION 2</span>
+                    <span className="tracking-tight text-slate-800">📅 WBS 및 일정 관리 간트 차트 (Phase & Gantt Timeline)</span>
+                  </h3>
+                </div>
+              )}
               
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+              <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 bg-slate-50/30 border border-slate-200 p-5 rounded-2xl">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                     <CalendarDays className="w-5 h-5 text-indigo-500" />
-                    <span>개발 단계별 마스터플랜 (Gantt Chart)</span>
+                    <span>실시간 태스크 진치율 및 예상 가시성 간트 (Gantt)</span>
                   </h2>
                   <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    프로젝트 각 단계별 세부 태스크 일정을 조율하세요.
-                    <strong> 리스트의 항목명을 클릭하면 디테일 추가/수정과 데이터 제어가 가능합니다.</strong>
+                    프로젝트 각 단계별 완결 시기 및 인공지능 기반 리드타임 지연 위험을 종합 연계 시범 모니터링합니다.
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 shrink-0">
-                  {/* 간트 차트 마일스톤 토글 옵션 */}
-                  <label className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100/50 transition-all cursor-pointer select-none">
+                
+                {/* 간트 차트 뷰 컨트롤 헤더 패널 */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* 정렬 메뉴 필터 UI 제어부 */}
+                  <div className="flex items-center space-x-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-sm text-slate-600">
+                    <span>보기 모드:</span>
+                    <select
+                      value={ganttViewMode}
+                      onChange={(e) => setGanttViewMode(e.target.value as "grid" | "split")}
+                      className="bg-transparent border-none text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                    >
+                      <option value="grid">격자 줄 맞춤 뷰 (Grid Align)</option>
+                      <option value="split">세부 태스크 사이뷰 (Split View)</option>
+                    </select>
+                  </div>
+
+                  <label className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm cursor-pointer hover:bg-slate-50 transition-colors">
                     <input
                       type="checkbox"
                       checked={showMilestonesOnGantt}
                       onChange={(e) => setShowMilestonesOnGantt(e.target.checked)}
-                      className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
-                    <Flag className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                    <span>마일스톤 동시 표시</span>
+                    <span>목표 이정표 표출</span>
                   </label>
-
-                  {/* 간트 차트 발주 납기 토글 옵션 */}
-                  <label className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100/50 transition-all cursor-pointer select-none" title="발주품이 있는 업무 뒤에 예상 납기 연장 구간을 표출합니다.">
+                  
+                  <label className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm cursor-pointer hover:bg-slate-50 transition-colors">
                     <input
                       type="checkbox"
                       checked={showOrderLeadTimeOnGantt}
                       onChange={(e) => setShowOrderLeadTimeOnGantt(e.target.checked)}
-                      className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span>발주품 예상납기 시각화</span>
+                    <span>발주 리드타임 연동 표기</span>
                   </label>
-
+                  
                   {!isCleanView && (
-                    <>
-                      <button
-                        onClick={handleOpenAddPhase}
-                        className="p-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 hover:text-indigo-600 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-1.5 animate-fadeIn"
-                      >
-                        <FolderPlus className="w-4 h-4 text-indigo-500" />
-                        <span>구분 단계 추가</span>
-                      </button>
-                      <button
-                        onClick={handleOpenAddTask}
-                        className="p-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center gap-1.5 animate-fadeIn"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>디테일 업무 추가</span>
-                      </button>
-                    </>
+                    <button
+                      onClick={handleOpenAddTask}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>태스크 추가</span>
+                    </button>
                   )}
                 </div>
               </div>
 
-              {/* 간트 스케줄 메인 스페이스 */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col lg:flex-row">
-                
-                {/* 좌측 슬라이드: 태스크 목록(고정폭) */}
-                <div className="w-full lg:w-[480px] border-b lg:border-b-0 lg:border-r border-slate-200 flex-shrink-0 flex flex-col bg-slate-50/60">
-                  <div className="border-b border-slate-200 px-5 py-4 flex justify-between items-center bg-white">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">단계 및 태스크 (클릭 시 수정)</span>
-                    <span className="text-xs font-bold text-slate-400">진치율 조절 / 옵션</span>
-                  </div>
+               {/* 간트 스케줄 메인 스페이스 */}
+              {ganttViewMode === "grid" ? (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto w-full custom-scrollbar">
+                    <div className="min-w-[1240px] flex flex-col relative">
+                      
+                      {/* 마일스톤 오버레이 시각화 가이드라인 */}
+                      {(() => {
+                        if (!showMilestonesOnGantt) return null;
 
-                  <div className="flex-1 overflow-y-auto max-h-[600px] divide-y divide-slate-100/70 custom-scrollbar">
-                    {phases.map(phase => {
-                      const phaseColor = getPhaseColorMap(phase.color);
-                      const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === phase.id);
-                      const parentProgress = phaseTasks.length > 0
-                        ? Math.round(phaseTasks.reduce((acc, task) => acc + task.progress, 0) / phaseTasks.length)
-                        : 0;
+                        const projStart = new Date(project.startDate).getTime();
+                        const projEnd = new Date(project.endDate).getTime();
+                        const totalSpan = projEnd - projStart;
 
-                      return (
-                        <div 
-                          key={phase.id} 
-                          className={`bg-white transition-all duration-200 ${
-                            draggedPhaseId === phase.id 
-                              ? "opacity-50 scale-[0.99] border-dashed border border-indigo-200" 
-                              : dragOverPhaseId === phase.id 
-                              ? "bg-indigo-50/20 border-t-2 border-t-indigo-600 border-b border-indigo-150" 
-                              : ""
-                          }`}
-                          onDragOver={(e) => handlePhaseDragOver(e, phase.id)}
-                          onDragLeave={handlePhaseDragLeave}
-                          onDrop={(e) => handlePhaseDrop(e, phase.id)}
-                        >
-                          
-                          {/* Phase Header Row */}
-                          <div 
-                            draggable={!isCleanView}
-                            onDragStart={(e) => handlePhaseDragStart(e, phase.id)}
-                            onDragEnd={handlePhaseDragEnd}
-                            className={`p-4 flex justify-between items-center bg-slate-50/40 border-b border-slate-100 group transition-all ${!isCleanView ? "cursor-grab active:cursor-grabbing" : ""}`}
-                          >
-                            <div className="flex items-center space-x-2 min-w-0 flex-1">
-                              {!isCleanView && (
-                                <div className="text-slate-400 hover:text-indigo-500 p-0.5 transition-colors shrink-0">
-                                  <GripVertical className="w-3.5 h-3.5" />
-                                </div>
-                              )}
-                              <span className={`w-3 h-3 rounded-full shrink-0 ${phaseColor.line}`}></span>
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditPhase(phase);
-                                }}
-                                className="font-extrabold text-xs md:text-sm text-slate-900 hover:text-indigo-600 hover:underline cursor-pointer truncate"
-                                title="단계 설정 수정"
-                              >
-                                {phase.name}
-                              </span>
+                        const positionedMilestones = milestones.map(m => {
+                          const milestoneTime = new Date(m.targetDate).getTime();
+                          let leftPercent = totalSpan > 0 ? ((milestoneTime - projStart) / totalSpan) * 100 : 0;
+                          if (leftPercent < 0) leftPercent = 0;
+                          if (leftPercent > 100) leftPercent = 100;
+                          return { ...m, leftPercent };
+                        }).sort((a, b) => a.leftPercent - b.leftPercent);
+
+                        // 가로 겹침 방지 (스태거링) 레벨 연산
+                        const levels: number[] = [];
+                        const minSpacing = 12; // 겹침 판정 기준 간격 (12%)
+
+                        const milestonesWithLevels = positionedMilestones.map(m => {
+                          let level = 0;
+                          for (let lvl = 0; lvl < 10; lvl++) {
+                            if (levels[lvl] === undefined || m.leftPercent - levels[lvl] >= minSpacing) {
+                              level = lvl;
+                              levels[lvl] = m.leftPercent;
+                              break;
+                            }
+                          }
+                          return { ...m, level };
+                        });
+
+                        return milestonesWithLevels.map(m => {
+                          return (
+                            <div
+                              key={m.id}
+                              className="absolute top-0 bottom-0 pointer-events-none flex flex-col items-center z-10"
+                              style={{ left: `calc(440px + calc(100% - 440px) * ${m.leftPercent} / 100)` }}
+                            >
+                              {/* 가이드 수직 점선 */}
+                              <div className="w-0 border-l border-dashed border-indigo-500/20 h-full absolute top-0 pointer-events-none"></div>
                             </div>
-                            <div className="flex items-center space-x-3 text-xs shrink-0">
-                              <span className={`font-bold py-0.5 px-2.5 rounded-full bg-slate-100 text-[10px] ${phaseColor.text}`}>
-                                {parentProgress}%
-                              </span>
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1.5 items-center">
-                                <button onClick={() => handleEditPhase(phase)} className="p-1 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer" title="단계 상세">
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => handleDeletePhase(phase.id)} className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer" title="단계 제거">
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
+                          );
+                        });
+                      })()}
+
+                      {/* Header Row (Left Title & Right Month Cells) */}
+                      <div className="flex flex-row border-b border-slate-200 sticky top-0 bg-white z-25 shadow-sm">
+                        <div className="w-[440px] shrink-0 sticky left-0 bg-white z-30 border-r border-slate-200 px-5 py-4 flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">단계 및 세부 업무 (좌우 가로 정렬 뷰)</span>
+                          <span className="text-xs font-bold text-slate-400">진치율 조절 / 옵션</span>
+                        </div>
+                        <div className="flex-grow flex bg-white min-w-[800px] relative">
+                          {/* 시작일 라벨 */}
+                          <div className="absolute left-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                            <span>{project.startDate}</span>
                           </div>
 
-                          {/* Task Child Component List */}
-                          {phaseTasks.map(task => {
-                            const isMemoEditing = quickMemoTaskId === task.id;
-                            const isDragging = draggedTaskId === task.id;
-                            const isDragOver = dragOverTaskId === task.id;
+                          {getGanttMonths().map((month, idx) => (
+                            <div key={idx} className="flex-1 py-4 text-center text-xs font-bold text-slate-500 border-r border-slate-100 last:border-r-0 bg-white">
+                              {month.getMonth() + 1}월
+                            </div>
+                          ))}
 
-                            return (
-                              <div
-                                key={task.id}
-                                draggable={!isCleanView}
-                                onDragStart={(e) => handleTaskDragStart(e, task.id)}
-                                onDragOver={(e) => handleTaskDragOver(e, task.id)}
-                                onDragLeave={handleTaskDragLeave}
-                                onDragEnd={handleTaskDragEnd}
-                                onDrop={(e) => handleTaskDrop(e, task.id, phase.id)}
-                                className={`pl-6 pr-4 min-h-[76px] py-3.5 border-b transition-all flex flex-col justify-center space-y-2.5 group relative ${
-                                  isDragging 
-                                    ? "bg-indigo-50/20 opacity-40 border-dashed border-indigo-250" 
-                                    : isDragOver
-                                    ? "bg-indigo-50/50 border-t-2 border-t-indigo-600 border-b border-indigo-100" 
-                                    : "bg-slate-50/10 hover:bg-slate-55/60 border-slate-100/60"
-                                }`}
-                              >
-                                <div className="flex justify-between items-start w-full gap-2">
-                                  <div className="min-w-0 pr-1 flex-1 flex items-start gap-2">
+                          {/* 종료일 라벨 */}
+                          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                            <span>{project.endDate}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Content Rows */}
+                      <div className="divide-y divide-slate-100">
+                        {phases.map(phase => {
+                          const phaseColor = getPhaseColorMap(phase.color);
+                          const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === phase.id);
+                          const parentProgress = phaseTasks.length > 0
+                            ? Math.round(phaseTasks.reduce((acc, task) => acc + task.progress, 0) / phaseTasks.length)
+                            : 0;
+
+                          return (
+                            <div 
+                              key={phase.id}
+                              className={`flex flex-col transition-all duration-200 ${
+                                draggedPhaseId === phase.id 
+                                  ? "opacity-50 scale-[0.99] border-dashed border border-indigo-200" 
+                                  : dragOverPhaseId === phase.id 
+                                  ? "bg-indigo-50/20 border-t-2 border-t-indigo-600 border-b border-indigo-150" 
+                                  : ""
+                              }`}
+                              onDragOver={(e) => handlePhaseDragOver(e, phase.id)}
+                              onDragLeave={handlePhaseDragLeave}
+                              onDrop={(e) => handlePhaseDrop(e, phase.id)}
+                            >
+                              {/* Phase Container Row */}
+                              <div className="flex flex-row bg-slate-50/45 border-b border-slate-100 group h-[52px]">
+                                {/* Left Sticky Phase Header */}
+                                <div 
+                                  draggable={!isCleanView}
+                                  onDragStart={(e) => handlePhaseDragStart(e, phase.id)}
+                                  onDragEnd={handlePhaseDragEnd}
+                                  className={`w-[440px] shrink-0 sticky left-0 bg-slate-50/95 z-10 border-r border-slate-200 p-4 flex justify-between items-center transition-all ${!isCleanView ? "cursor-grab active:cursor-grabbing" : ""}`}
+                                >
+                                  <div className="flex items-center space-x-2 min-w-0 flex-1">
                                     {!isCleanView && (
-                                      <div 
-                                        className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-indigo-500 p-0.5 mt-0.5 transition-colors shrink-0"
-                                        title="드래그하여 순서 변경"
-                                      >
+                                      <div className="text-slate-400 hover:text-indigo-500 p-0.5 transition-colors shrink-0">
                                         <GripVertical className="w-3.5 h-3.5" />
                                       </div>
                                     )}
-                                    <div className="min-w-0 flex-1">
-                                      <p
-                                        onClick={() => handleEditTask(task)}
-                                        className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate"
-                                        title="태스크 상세 정보 변경"
-                                      >
-                                        {task.name}
-                                      </p>
-                                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1.5 text-[10px] text-slate-400 font-bold">
-                                        <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                                          <User className="w-3 h-3 text-slate-400" />
-                                          {task.owner || "미지정"}
-                                        </span>
-                                        <span>{task.startDate} ~ {task.endDate}</span>
-                                        {task.hasOrder && (
-                                          <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded flex items-center gap-0.5" title="발주시 입고 예상 납기 연동 상태">
-                                            <span>📦 발주납기: <strong>{task.orderLeadTime || 1}M</strong></span>
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
+                                    <span className={`w-3 h-3 rounded-full shrink-0 ${phaseColor.line}`}></span>
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEditPhase(phase);
+                                      }}
+                                      className="font-extrabold text-xs md:text-sm text-slate-900 hover:text-indigo-600 hover:underline cursor-pointer truncate"
+                                      title="단계 설정 수정"
+                                    >
+                                      {phase.name}
+                                    </span>
                                   </div>
-
-                                  <div className="flex items-center space-x-2.5 flex-shrink-0">
-                                    {!isCleanView ? (
-                                      <div className="flex items-center space-x-1.5">
-                                        <input
-                                          type="range"
-                                          min="0"
-                                          max="100"
-                                          value={task.progress}
-                                          onChange={(e) => handleUpdateTaskProgressInline(task.id, parseInt(e.target.value))}
-                                          className="w-14 md:w-16 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                                          title="인라인 진척률 직접 튜닝"
-                                        />
-                                        <span className="text-[10px] font-extrabold text-slate-500 w-8 text-right shrink-0">{task.progress}%</span>
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs font-extrabold text-slate-600 pr-2 shrink-0">{task.progress}%</span>
-                                    )}
-                                    {!isCleanView && (
-                                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 items-center bg-white/80 p-0.5 rounded-lg border border-slate-100 shadow-sm">
-                                        <button onClick={() => handleEditTask(task)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer" title="상세 정보">
-                                          <Edit2 className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="업무 삭제">
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    )}
+                                  <div className="flex items-center space-x-3 text-xs shrink-0">
+                                    <span className={`font-bold py-0.5 px-2.5 rounded-full bg-slate-100 text-[10px] ${phaseColor.text}`}>
+                                      {parentProgress}%
+                                    </span>
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1.5 items-center">
+                                      <button onClick={() => handleEditPhase(phase)} className="p-1 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer" title="단계 상세">
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button onClick={() => handleDeletePhase(phase.id)} className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer" title="단계 제거">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
 
-                                {/* 메모 및 사진 퀵 컨트롤 버튼 - 클린 뷰에서는 숨김 */}
-                                {!isCleanView && (
-                                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                                    {/* 메모 추가/수정 버튼 */}
-                                    <button
-                                      onClick={() => {
-                                        if (isMemoEditing) {
-                                          setQuickMemoTaskId(null);
-                                        } else {
-                                          setQuickMemoTaskId(task.id);
-                                          setQuickMemoText(task.memo || "");
+                                {/* Right Side Phase Blank row space with subtle vertical dividers to map months */}
+                                <div className="flex-grow flex relative items-center justify-center bg-slate-50/10 min-w-[800px] h-full">
+                                  {getGanttMonths().map((_, idx) => (
+                                    <div key={idx} className="flex-1 h-full border-r border-slate-100/50 last:border-r-0 pointer-events-none"></div>
+                                  ))}
+                                  <span className="absolute left-6 text-[10px] text-slate-400/80 font-bold italic tracking-wide">
+                                    📂 {phase.name} 단계 구간
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Task Rows inside the Phase */}
+                              {phaseTasks.map(task => {
+                                const isMemoEditing = quickMemoTaskId === task.id;
+                                const isDragging = draggedTaskId === task.id;
+                                const isDragOver = dragOverTaskId === task.id;
+                                const barPlacement = calculateTimelineBarPosition(task.startDate, task.endDate);
+
+                                return (
+                                  <div 
+                                    key={task.id}
+                                    draggable={!isCleanView}
+                                    onDragStart={(e) => handleTaskDragStart(e, task.id)}
+                                    onDragOver={(e) => handleTaskDragOver(e, task.id)}
+                                    onDragLeave={handleTaskDragLeave}
+                                    onDragEnd={handleTaskDragEnd}
+                                    onDrop={(e) => handleTaskDrop(e, task.id, phase.id)}
+                                    className={`flex flex-row transition-all relative border-b border-slate-100/60 group ${
+                                      isDragging 
+                                        ? "bg-indigo-50/10 opacity-40 border-dashed border-indigo-200" 
+                                        : isDragOver
+                                        ? "bg-indigo-50/40 border-t-2 border-t-indigo-600 border-b border-indigo-105" 
+                                        : "hover:bg-slate-50/40"
+                                    }`}
+                                  >
+                                    {/* Left Sticky Task Metadata Cell */}
+                                    <div className="w-[440px] shrink-0 sticky left-0 bg-white z-10 border-r border-slate-200 pl-6 pr-4 py-3.5 flex flex-col justify-center space-y-2.5 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                      <div className="flex justify-between items-start w-full gap-2">
+                                        <div className="min-w-0 pr-1 flex-1 flex items-start gap-2">
+                                          {!isCleanView && (
+                                            <div 
+                                              className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-indigo-500 p-0.5 mt-0.5 transition-colors shrink-0"
+                                              title="드래그하여 순서 변경"
+                                            >
+                                              <GripVertical className="w-3.5 h-3.5" />
+                                            </div>
+                                          )}
+                                          <div className="min-w-0 flex-1">
+                                            <p
+                                              onClick={() => handleEditTask(task)}
+                                              className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate"
+                                              title="태스크 상세 정보 변경"
+                                            >
+                                              {task.name}
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1.5 text-[10px] text-slate-400 font-bold">
+                                              <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                                <User className="w-3 h-3 text-slate-400" />
+                                                {task.owner || "미지정"}
+                                              </span>
+                                              <span>{task.startDate} ~ {task.endDate}</span>
+                                              {task.hasOrder && (
+                                                <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded flex items-center gap-0.5" title="발주시 입고 예상 납기 연동 상태">
+                                                  <span>📦 발주납기: <strong>{task.orderLeadTime || 1}M</strong></span>
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center space-x-2.5 flex-shrink-0">
+                                          {!isCleanView ? (
+                                            <div className="flex items-center space-x-1.5">
+                                              <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                value={task.progress}
+                                                onChange={(e) => handleUpdateTaskProgressInline(task.id, parseInt(e.target.value))}
+                                                className="w-14 md:w-16 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                                title="인라인 진척률 직접 튜닝"
+                                              />
+                                              <span className="text-[10px] font-extrabold text-slate-500 w-8 text-right shrink-0">{task.progress}%</span>
+                                            </div>
+                                          ) : (
+                                            <span className="text-xs font-extrabold text-slate-600 pr-2 shrink-0">{task.progress}%</span>
+                                          )}
+                                          {!isCleanView && (
+                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 items-center bg-white/80 p-0.5 rounded-lg border border-slate-100 shadow-sm">
+                                              <button onClick={() => handleEditTask(task)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer" title="상세 정보">
+                                                <Edit2 className="w-3.5 h-3.5" />
+                                              </button>
+                                              <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="업무 삭제">
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* 메모 및 사진 퀵 컨트롤 버튼 */}
+                                      {!isCleanView && (
+                                        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                          <button
+                                            onClick={() => {
+                                              if (isMemoEditing) {
+                                                setQuickMemoTaskId(null);
+                                              } else {
+                                                setQuickMemoTaskId(task.id);
+                                                setQuickMemoText(task.memo || "");
+                                              }
+                                            }}
+                                            className={`px-2 py-0.5 rounded border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                                              task.memo 
+                                                ? "bg-amber-50/70 border-amber-200 text-amber-700 hover:bg-amber-50" 
+                                                : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300"
+                                            }`}
+                                          >
+                                            <FileText className="w-3 h-3 shrink-0" />
+                                            <span>{task.memo ? "메모 수정" : "메모 남기기"}</span>
+                                          </button>
+
+                                          <label className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all">
+                                            <Camera className="w-3 h-3 shrink-0" />
+                                            <span>{task.imageUrl ? "사진 갱신" : "사진 올리기"}</span>
+                                            <input
+                                              type="file"
+                                              accept="image/*"
+                                              className="hidden"
+                                              onChange={(e) => handleQuickImageUpload(task.id, e)}
+                                            />
+                                          </label>
+                                        </div>
+                                      )}
+
+                                      {/* 인라인 퀵 메모 편집 영역 */}
+                                      {isMemoEditing && (
+                                        <div className="bg-amber-50/20 border border-amber-200/40 rounded-xl p-2.5 space-y-2 mt-1.5">
+                                          <textarea
+                                            value={quickMemoText}
+                                            onChange={(e) => setQuickMemoText(e.target.value)}
+                                            placeholder="이 구분 단계 또는 디테일 태스크에 명기할 정보 기입..."
+                                            rows={2}
+                                            className="w-full text-xs p-2 text-slate-800 bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400 placeholder-slate-400 font-medium"
+                                          />
+                                          <div className="flex justify-end gap-1.5">
+                                            <button
+                                              onClick={() => setQuickMemoTaskId(null)}
+                                              className="px-2 py-0.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-md text-[10px] font-bold cursor-pointer"
+                                            >
+                                              취소
+                                            </button>
+                                            <button
+                                              onClick={() => handleSaveQuickMemo(task.id)}
+                                              className="px-2.5 py-0.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white rounded-md text-[10px] font-bold cursor-pointer transition-all shadow-sm"
+                                            >
+                                              메모 저장
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* 저장된 메모 및 참고 사진 동시 표출 */}
+                                      {(task.memo || task.imageUrl) && !isMemoEditing && (
+                                        <div className="flex flex-col gap-2 p-2.5 bg-indigo-50/20 border border-indigo-100/30 rounded-xl mt-1">
+                                          {task.memo && (
+                                            <div className="text-[11px] text-slate-600 leading-relaxed font-semibold flex items-start gap-1.5">
+                                              <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                                              <span>{task.memo}</span>
+                                            </div>
+                                          )}
+                                          {task.imageUrl && (
+                                            <div className="flex items-center gap-2">
+                                              <div className="relative shrink-0">
+                                                <img
+                                                  src={task.imageUrl}
+                                                  alt="첨부파일"
+                                                  onClick={() => setActivePreviewImageUrl(task.imageUrl || null)}
+                                                  className="w-10 h-10 rounded-lg object-cover cursor-zoom-in border border-slate-200 hover:scale-105 hover:border-slate-300 transition-all shadow-sm"
+                                                  title="미리보기 (클릭)"
+                                                />
+                                              </div>
+                                              <div className="text-[9px] text-slate-400 font-bold shrink-0 flex flex-col">
+                                                <span>참고 사진 완료 (클릭 시 확대)</span>
+                                                <button
+                                                  onClick={() => setTasks(tasks.map(t => t.id === task.id ? { ...t, imageUrl: undefined } : t))}
+                                                  className="text-rose-500 hover:text-rose-600 text-left underline font-extrabold mt-0.5"
+                                                >
+                                                  사진 지우기
+                                                </button>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Right Side Task Timeline Cell (Height dynamic alignment!) */}
+                                    <div className="flex-grow min-w-[800px] relative bg-white hover:bg-slate-50/5 transition-colors min-h-[72px] py-4">
+                                      {/* Subtle background dividers representing months */}
+                                      <div className="absolute inset-0 flex pointer-events-none">
+                                        {getGanttMonths().map((_, idx) => (
+                                          <div key={idx} className="flex-1 h-full border-r border-slate-100/40 last:border-r-0"></div>
+                                        ))}
+                                      </div>
+
+                                      {/* 타임라인 바 (도형) */}
+                                      <div
+                                        onClick={() => handleEditTask(task)}
+                                        title={`${task.name} (${task.progress}% 완료)`}
+                                        className="absolute h-7 rounded-lg flex items-center justify-center px-2 text-[10px] font-extrabold text-slate-800 border border-slate-200/80 bg-slate-50/60 shadow-sm overflow-hidden transition-all duration-300 cursor-pointer hover:opacity-90 max-w-full"
+                                        style={{
+                                          left: `${barPlacement.left}%`,
+                                          width: `${barPlacement.width}%`,
+                                          top: '12px'
+                                        }}
+                                      >
+                                        <div
+                                          className={`${phaseColor.bar} absolute left-0 top-0 bottom-0 transition-all duration-700`}
+                                          style={{ width: `${task.progress}%` }}
+                                        ></div>
+                                        <span className={`relative z-10 font-extrabold filter drop-shadow ${task.progress > 40 ? "text-white" : "text-slate-700"}`}>
+                                          {task.hasOrder ? "📦 " : ""}
+                                          {task.progress > 0 && task.progress < 100 ? `${task.progress}%` : ""}
+                                        </span>
+                                      </div>
+
+                                      {/* 예상 납기 리드타임 연장 바 시각 표출 */}
+                                      {task.hasOrder && task.orderLeadTime && showOrderLeadTimeOnGantt && (() => {
+                                        const leadWidth = getLeadTimeWidthPercent(task.endDate, task.orderLeadTime);
+                                        if (leadWidth <= 0) return null;
+                                        const UnitedLeadLeft = barPlacement.left + barPlacement.width;
+                                        return (
+                                          <div
+                                            onClick={() => handleEditTask(task)}
+                                            title={`예상 납기: 완료일로부터 +${task.orderLeadTime}개월 소요 예상`}
+                                            className="absolute h-7 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50/50 flex items-center justify-center text-[9px] font-black text-amber-800 px-1.5 cursor-pointer hover:bg-amber-100/60 transition-all z-10 animate-pulse text-center"
+                                            style={{
+                                              left: `${UnitedLeadLeft}%`,
+                                              width: `${leadWidth}%`,
+                                              top: '12px'
+                                            }}
+                                          >
+                                            <span className="truncate">🚚 납기:+{task.orderLeadTime}M</span>
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* 이정표 (Milestone) 각 항목의 진척률 그래프 끝 무렵 적절한 위치 배정 */}
+                                      {getTaskMilestones(task).map((m, mIdx) => {
+                                        const isDone = m.status === "완료";
+                                        const isWorking = m.status === "진행";
+                                        const iconColor = isDone ? "text-emerald-500 fill-emerald-500" : isWorking ? "text-indigo-500 fill-indigo-500" : "text-amber-500 fill-amber-500";
+                                        const badgeColor = isDone
+                                          ? "border-emerald-200 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100/50"
+                                          : isWorking
+                                          ? "border-indigo-200 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-100/50"
+                                          : "border-amber-200 bg-amber-50 text-amber-800 ring-1 ring-amber-100/50";
+                                        
+                                        const baseLeft = barPlacement.left + barPlacement.width;
+                                        const leadWidth = task.hasOrder && task.orderLeadTime && showOrderLeadTimeOnGantt 
+                                          ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
+                                          : 0;
+                                        
+                                        let milestoneLeft = baseLeft + leadWidth + (mIdx * 12);
+                                        let offsetStyle: React.CSSProperties = {
+                                          left: `${milestoneLeft}%`,
+                                          top: '12px',
+                                          transform: 'translateX(6px)'
+                                        };
+                                        if (milestoneLeft > 85) {
+                                          const rightPct = 100 - (baseLeft + leadWidth);
+                                          offsetStyle = {
+                                            right: `${rightPct}%`,
+                                            top: '12px',
+                                            transform: 'translateX(-6px)'
+                                          };
                                         }
-                                      }}
-                                      className={`px-2 py-0.5 rounded border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
-                                        task.memo 
-                                          ? "bg-amber-50/70 border-amber-200 text-amber-700 hover:bg-amber-50" 
-                                          : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300"
-                                      }`}
-                                    >
-                                      <FileText className="w-3 h-3 shrink-0" />
-                                      <span>{task.memo ? "메모 수정" : "메모 남기기"}</span>
-                                    </button>
 
-                                    {/* 기기 상 사진 파일 업로드 */}
-                                    <label className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all font-semibold">
-                                      <Camera className="w-3 h-3 shrink-0" />
-                                      <span>{task.imageUrl ? "사진 갱신" : "사진 올리기"}</span>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => handleQuickImageUpload(task.id, e)}
-                                      />
-                                    </label>
-                                  </div>
-                                )}
+                                        return (
+                                          <div
+                                            key={m.id}
+                                            onClick={() => handleEditMilestone(m)}
+                                            title={`🚩 이정표: ${m.name} (${m.targetDate}) [상태: ${m.status}]`}
+                                            className={`absolute h-7 rounded-full border shadow-sm flex items-center space-x-1.5 px-3 py-1 cursor-pointer hover:scale-105 active:scale-95 hover:z-30 transition-all duration-150 text-[10px] font-black z-20 ${badgeColor}`}
+                                            style={offsetStyle}
+                                          >
+                                            <Flag className={`w-3 h-3 ${iconColor}`} />
+                                            <span className="truncate max-w-[125px]">{m.name}</span>
+                                            <span className="text-[8px] opacity-80 font-bold whitespace-nowrap">({m.targetDate.substring(5)})</span>
+                                          </div>
+                                        );
+                                      })}
 
-                                {/* 인라인 퀵 메모 편집 영역 */}
-                                {isMemoEditing && (
-                                  <div className="bg-amber-50/20 border border-amber-200/40 rounded-xl p-2.5 space-y-2 mt-1.5 animate-fadeIn">
-                                    <textarea
-                                      value={quickMemoText}
-                                      onChange={(e) => setQuickMemoText(e.target.value)}
-                                      placeholder="이 구분 단계 또는 디테일 태스크에 명기할 정보 기입..."
-                                      rows={2}
-                                      className="w-full text-xs p-2 text-slate-800 bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400 placeholder-slate-400 font-medium"
-                                    />
-                                    <div className="flex justify-end gap-1.5">
-                                      <button
-                                        onClick={() => setQuickMemoTaskId(null)}
-                                        className="px-2 py-0.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-md text-[10px] font-bold cursor-pointer"
+                                      {/* 도형 바로 아래 텍스트 (줄바꿈 없이 노출) */}
+                                      <div
+                                        onClick={() => handleEditTask(task)}
+                                        className="absolute text-[11px] font-semibold text-slate-500 hover:text-indigo-600 cursor-pointer whitespace-nowrap z-10"
+                                        style={{
+                                          left: `${barPlacement.left}%`,
+                                          top: '44px'
+                                        }}
                                       >
-                                        취소
-                                      </button>
-                                      <button
-                                        onClick={() => handleSaveQuickMemo(task.id)}
-                                        className="px-2.5 py-0.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white rounded-md text-[10px] font-bold cursor-pointer shadow-sm transition-all"
-                                      >
-                                        메모 저장
-                                      </button>
+                                        {task.name}
+                                      </div>
                                     </div>
                                   </div>
-                                )}
+                                );
+                              })}
 
-                                {/* 저장된 메모 및 참고 사진 동시 표출 컨테이너 */}
-                                {(task.memo || task.imageUrl) && !isMemoEditing && (
-                                  <div className="flex flex-col gap-2 p-2.5 bg-indigo-50/20 border border-indigo-100/30 rounded-xl mt-1">
-                                    {task.memo && (
-                                      <div className="text-[11px] text-slate-600 leading-relaxed font-semibold flex items-start gap-1.5">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
-                                        <span>{task.memo}</span>
-                                      </div>
-                                    )}
-                                    {task.imageUrl && (
-                                      <div className="flex items-center gap-2">
-                                        <div className="relative shrink-0">
-                                          <img
-                                            src={task.imageUrl}
-                                            alt="첨부파일"
-                                            onClick={() => setActivePreviewImageUrl(task.imageUrl || null)}
-                                            className="w-10 h-10 rounded-lg object-cover cursor-zoom-in border border-slate-200 hover:scale-105 hover:border-slate-300 transition-all shadow-sm"
-                                            title="미리보기 (클릭)"
-                                          />
-                                        </div>
-                                        <div className="text-[9px] text-slate-400 font-bold shrink-0 flex flex-col">
-                                          <span>참고 스크린샷 연동 완료 (클릭 시 확대)</span>
-                                          <button
-                                            onClick={() => setTasks(tasks.map(t => t.id === task.id ? { ...t, imageUrl: undefined } : t))}
-                                            className="text-rose-500 hover:text-rose-600 text-left underline font-extrabold mt-0.5"
-                                          >
-                                            사진 지우기
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
+                              {phaseTasks.length === 0 && (
+                                <div className="flex flex-row border-b border-slate-100/60 bg-slate-50/10 h-12">
+                                  <div className="w-[440px] shrink-0 sticky left-0 bg-white z-10 border-r border-slate-200 pl-8 flex items-center">
+                                    <p className="text-[11px] text-slate-300 italic">이 단계에 배속된 태스크가 없습니다.</p>
                                   </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                                  <div className="flex-grow min-w-[800px] relative"></div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
 
-                          {phaseTasks.length === 0 && (
-                            <p className="text-[11px] py-3 text-slate-300 text-center italic">이 단계에 배속된 태스크가 없습니다.</p>
-                          )}
-
-                        </div>
-                      );
-                    })}
+                    </div>
                   </div>
                 </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col lg:flex-row">
+                  
+                  {/* 좌측 슬라이드: 태스크 목록(고정폭) */}
+                  <div className="w-full lg:w-[480px] border-b lg:border-b-0 lg:border-r border-slate-200 flex-shrink-0 flex flex-col bg-slate-50/60">
+                    <div className="border-b border-slate-200 px-5 py-4 flex justify-between items-center bg-white">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">단계 및 태스크 (클릭 시 수정)</span>
+                      <span className="text-xs font-bold text-slate-400">진치율 조절 / 옵션</span>
+                    </div>
 
-                {/* 우측 연계: 타임라인 그리드 (가로스크롤 대응) */}
-                <div className="flex-1 overflow-x-auto bg-white relative custom-scrollbar max-h-[650px]">
-                  <div className="min-w-[800px] flex flex-col h-full relative">
+                    <div className={`flex-1 ${isCleanView ? '' : 'overflow-y-auto max-h-[600px]'} divide-y divide-slate-100/70 custom-scrollbar`}>
+                      {phases.map(phase => {
+                        const phaseColor = getPhaseColorMap(phase.color);
+                        const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === phase.id);
+                        const parentProgress = phaseTasks.length > 0
+                          ? Math.round(phaseTasks.reduce((acc, task) => acc + task.progress, 0) / phaseTasks.length)
+                          : 0;
+
+                        return (
+                          <div 
+                            key={phase.id} 
+                            className={`bg-white transition-all duration-200 ${
+                              draggedPhaseId === phase.id 
+                                ? "opacity-50 scale-[0.99] border-dashed border border-indigo-200" 
+                                : dragOverPhaseId === phase.id 
+                                ? "bg-indigo-50/20 border-t-2 border-t-indigo-600 border-b border-indigo-150" 
+                                : ""
+                            }`}
+                            onDragOver={(e) => handlePhaseDragOver(e, phase.id)}
+                            onDragLeave={handlePhaseDragLeave}
+                            onDrop={(e) => handlePhaseDrop(e, phase.id)}
+                          >
+                            
+                            {/* Phase Header Row */}
+                            <div 
+                              draggable={!isCleanView}
+                              onDragStart={(e) => handlePhaseDragStart(e, phase.id)}
+                              onDragEnd={handlePhaseDragEnd}
+                              className={`p-4 flex justify-between items-center bg-slate-50/40 border-b border-slate-100 group transition-all ${!isCleanView ? "cursor-grab active:cursor-grabbing" : ""}`}
+                            >
+                              <div className="flex items-center space-x-2 min-w-0 flex-1">
+                                {!isCleanView && (
+                                  <div className="text-slate-400 hover:text-indigo-500 p-0.5 transition-colors shrink-0">
+                                    <GripVertical className="w-3.5 h-3.5" />
+                                  </div>
+                                )}
+                                <span className={`w-3 h-3 rounded-full shrink-0 ${phaseColor.line}`}></span>
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditPhase(phase);
+                                  }}
+                                  className="font-extrabold text-xs md:text-sm text-slate-900 hover:text-indigo-600 hover:underline cursor-pointer truncate"
+                                  title="단계 설정 수정"
+                                >
+                                  {phase.name}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-3 text-xs shrink-0">
+                                <span className={`font-bold py-0.5 px-2.5 rounded-full bg-slate-100 text-[10px] ${phaseColor.text}`}>
+                                  {parentProgress}%
+                                </span>
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1.5 items-center">
+                                  <button onClick={() => handleEditPhase(phase)} className="p-1 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer" title="단계 상세">
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => handleDeletePhase(phase.id)} className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer" title="단계 제거">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Task Child Component List */}
+                            {phaseTasks.map(task => {
+                              const isMemoEditing = quickMemoTaskId === task.id;
+                              const isDragging = draggedTaskId === task.id;
+                              const isDragOver = dragOverTaskId === task.id;
+
+                              return (
+                                <div
+                                  key={task.id}
+                                  draggable={!isCleanView}
+                                  onDragStart={(e) => handleTaskDragStart(e, task.id)}
+                                  onDragOver={(e) => handleTaskDragOver(e, task.id)}
+                                  onDragLeave={handleTaskDragLeave}
+                                  onDragEnd={handleTaskDragEnd}
+                                  onDrop={(e) => handleTaskDrop(e, task.id, phase.id)}
+                                  className={`pl-6 pr-4 min-h-[76px] py-3.5 border-b transition-all flex flex-col justify-center space-y-2.5 group relative ${
+                                    isDragging 
+                                      ? "bg-indigo-50/20 opacity-40 border-dashed border-indigo-250" 
+                                      : isDragOver
+                                      ? "bg-indigo-50/50 border-t-2 border-t-indigo-600 border-b border-indigo-100" 
+                                      : "bg-slate-50/10 hover:bg-slate-55/60 border-slate-100/60"
+                                  }`}
+                                >
+                                  <div className="flex justify-between items-start w-full gap-2">
+                                    <div className="min-w-0 pr-1 flex-1 flex items-start gap-2">
+                                      {!isCleanView && (
+                                        <div 
+                                          className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-indigo-500 p-0.5 mt-0.5 transition-colors shrink-0"
+                                          title="드래그하여 순서 변경"
+                                        >
+                                          <GripVertical className="w-3.5 h-3.5" />
+                                        </div>
+                                      )}
+                                      <div className="min-w-0 flex-1">
+                                        <p
+                                          onClick={() => handleEditTask(task)}
+                                          className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate"
+                                          title="태스크 상세 정보 변경"
+                                        >
+                                          {task.name}
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1.5 text-[10px] text-slate-400 font-bold">
+                                          <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                            <User className="w-3 h-3 text-slate-400" />
+                                            {task.owner || "미지정"}
+                                          </span>
+                                          <span>{task.startDate} ~ {task.endDate}</span>
+                                          {task.hasOrder && (
+                                            <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded flex items-center gap-0.5" title="발주시 입고 예상 납기 연동 상태">
+                                              <span>📦 발주납기: <strong>{task.orderLeadTime || 1}M</strong></span>
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2.5 flex-shrink-0">
+                                      {!isCleanView ? (
+                                        <div className="flex items-center space-x-1.5">
+                                          <input
+                                            type="range"
+                                            min="0"
+                                            max="100"
+                                            value={task.progress}
+                                            onChange={(e) => handleUpdateTaskProgressInline(task.id, parseInt(e.target.value))}
+                                            className="w-14 md:w-16 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                            title="인라인 진척률 직접 튜닝"
+                                          />
+                                          <span className="text-[10px] font-extrabold text-slate-500 w-8 text-right shrink-0">{task.progress}%</span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs font-extrabold text-slate-600 pr-2 shrink-0">{task.progress}%</span>
+                                      )}
+                                      {!isCleanView && (
+                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 items-center bg-white/80 p-0.5 rounded-lg border border-slate-100 shadow-sm">
+                                          <button onClick={() => handleEditTask(task)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer" title="상세 정보">
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="업무 삭제">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* 메모 및 사진 퀵 컨트롤 버튼 - 클린 뷰에서는 숨김 */}
+                                  {!isCleanView && (
+                                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                      {/* 메모 추가/수정 버튼 */}
+                                      <button
+                                        onClick={() => {
+                                          if (isMemoEditing) {
+                                            setQuickMemoTaskId(null);
+                                          } else {
+                                            setQuickMemoTaskId(task.id);
+                                            setQuickMemoText(task.memo || "");
+                                          }
+                                        }}
+                                        className={`px-2 py-0.5 rounded border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                                          task.memo 
+                                            ? "bg-amber-50/70 border-amber-200 text-amber-700 hover:bg-amber-50" 
+                                            : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300"
+                                        }`}
+                                      >
+                                        <FileText className="w-3 h-3 shrink-0" />
+                                        <span>{task.memo ? "메모 수정" : "메모 남기기"}</span>
+                                      </button>
+
+                                      {/* 기기 상 사진 파일 업로드 */}
+                                      <label className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all font-semibold">
+                                        <Camera className="w-3 h-3 shrink-0" />
+                                        <span>{task.imageUrl ? "사진 갱신" : "사진 올리기"}</span>
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          className="hidden"
+                                          onChange={(e) => handleQuickImageUpload(task.id, e)}
+                                        />
+                                      </label>
+                                    </div>
+                                  )}
+
+                                  {/* 인라인 퀵 메모 편집 영역 */}
+                                  {isMemoEditing && (
+                                    <div className="bg-amber-50/25 border border-amber-200/40 rounded-xl p-2.5 space-y-2 mt-1.5 animate-fadeIn font-semibold">
+                                      <textarea
+                                        value={quickMemoText}
+                                        onChange={(e) => setQuickMemoText(e.target.value)}
+                                        placeholder="이 구분 단계 또는 디테일 태스크에 명기할 정보 기입..."
+                                        rows={2}
+                                        className="w-full text-xs p-2 text-slate-800 bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400 placeholder-slate-400 font-medium"
+                                      />
+                                      <div className="flex justify-end gap-1.5">
+                                        <button
+                                          onClick={() => setQuickMemoTaskId(null)}
+                                          className="px-2 py-0.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-md text-[10px] font-bold cursor-pointer"
+                                        >
+                                          취소
+                                        </button>
+                                        <button
+                                          onClick={() => handleSaveQuickMemo(task.id)}
+                                          className="px-2.5 py-0.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white rounded-md text-[10px] font-bold cursor-pointer shadow-sm transition-all"
+                                        >
+                                          메모 저장
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* 저장된 메모 및 참고 사진 동시 표출 컨테이너 */}
+                                  {(task.memo || task.imageUrl) && !isMemoEditing && (
+                                    <div className="flex flex-col gap-2 p-2.5 bg-indigo-50/20 border border-indigo-100/30 rounded-xl mt-1">
+                                      {task.memo && (
+                                        <div className="text-[11px] text-slate-600 leading-relaxed font-semibold flex items-start gap-1.5">
+                                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                                          <span>{task.memo}</span>
+                                        </div>
+                                      )}
+                                      {task.imageUrl && (
+                                        <div className="flex items-center gap-2">
+                                          <div className="relative shrink-0">
+                                            <img
+                                              src={task.imageUrl}
+                                              alt="첨부파일"
+                                              onClick={() => setActivePreviewImageUrl(task.imageUrl || null)}
+                                              className="w-10 h-10 rounded-lg object-cover cursor-zoom-in border border-slate-200 hover:scale-105 hover:border-slate-300 transition-all shadow-sm"
+                                              title="미리보기 (클릭)"
+                                            />
+                                          </div>
+                                          <div className="text-[9px] text-slate-400 font-bold shrink-0 flex flex-col">
+                                            <span>참고 스크린샷 연동 완료 (클릭 시 확대)</span>
+                                            <button
+                                              onClick={() => setTasks(tasks.map(t => t.id === task.id ? { ...t, imageUrl: undefined } : t))}
+                                              className="text-rose-500 hover:text-rose-600 text-left underline font-extrabold mt-0.5"
+                                            >
+                                              사진 지우기
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {phaseTasks.length === 0 && (
+                              <p className="text-[11px] py-3 text-slate-300 text-center italic">이 단계에 배속된 태스크가 없습니다.</p>
+                            )}
+
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 우측 연계: 타임라인 그리드 (가로스크롤 대응) */}
+                  <div className={`flex-1 overflow-x-auto bg-white relative custom-scrollbar ${isCleanView ? '' : 'max-h-[650px]'}`}>
+                    <div className="min-w-[800px] flex flex-col h-full relative">
                     
                     {/* 마일스톤 오버레이 시각화 가이드라인 */}
                     {(() => {
@@ -2637,18 +3152,6 @@ export default function App() {
                       });
 
                       return milestonesWithLevels.map(m => {
-                        const isDone = m.status === "완료";
-                        const isWorking = m.status === "진행";
-                        const iconColor = isDone ? "text-slate-400" : isWorking ? "text-indigo-600" : "text-amber-500";
-                        const badgeBg = isDone 
-                          ? "bg-slate-50/95 text-slate-500 border-slate-300" 
-                          : isWorking 
-                          ? "bg-indigo-50/95 text-indigo-700 border-indigo-200 ring-1 ring-indigo-100" 
-                          : "bg-amber-50/95 text-amber-750 border-amber-200";
-
-                        // 겹치는 이정표인 경우 레벨에 따라 세로 top 값을 다르게 엇갈림 배치합니다 (헤더 아래 54px 기준, 36px씩 스태거)
-                        const topPosition = 54 + (m.level * 36);
-
                         return (
                           <div
                             key={m.id}
@@ -2657,29 +3160,30 @@ export default function App() {
                           >
                             {/* 가이드 수직 점선 */}
                             <div className="w-0 border-l border-dashed border-indigo-500/20 h-full absolute top-0 pointer-events-none"></div>
-                            
-                            {/* 귀여운 이정표 핀 뱃지 */}
-                            <div 
-                              className={`pointer-events-auto absolute -translate-x-1/2 flex items-center space-x-1 px-2.5 py-1 rounded-full border shadow-sm ${badgeBg} text-[10px] font-black whitespace-nowrap cursor-help hover:scale-105 hover:z-30 transition-all duration-150`}
-                              style={{ top: `${topPosition}px` }}
-                              title={`${m.name} (${m.targetDate}) - 진행단계: ${m.status}`}
-                            >
-                              <Flag className={`w-3 h-3 ${iconColor} fill-current`} />
-                              <span>{m.name}</span>
-                              <span className="text-[9px] opacity-85 font-normal">({m.targetDate.substring(5)})</span>
-                            </div>
                           </div>
                         );
                       });
                     })()}
 
                     {/* 월 헤더 가로선 */}
-                    <div className="flex border-b border-slate-200 sticky top-0 bg-white z-10 shadow-sm">
+                    <div className="flex border-b border-slate-200 sticky top-0 bg-white z-10 shadow-sm relative">
+                      {/* 시작일 라벨 */}
+                      <div className="absolute left-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        <span>{project.startDate}</span>
+                      </div>
+
                       {getGanttMonths().map((month, idx) => (
-                        <div key={idx} className="flex-1 py-4 text-center text-xs font-bold text-slate-500 border-r border-slate-100">
+                        <div key={idx} className="flex-1 py-4 text-center text-xs font-bold text-slate-500 border-r border-slate-100 last:border-r-0 bg-white">
                           {month.getMonth() + 1}월
                         </div>
                       ))}
+
+                      {/* 종료일 라벨 */}
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-slate-800/95 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 hover:scale-105 transition-all z-30 select-none font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                        <span>{project.endDate}</span>
+                      </div>
                     </div>
 
                     {/* 타임라인 바 영역 */}
@@ -2697,24 +3201,25 @@ export default function App() {
                             {phaseTasks.map(task => {
                               const barPlacement = calculateTimelineBarPosition(task.startDate, task.endDate);
                               return (
-                                <div key={task.id} className="h-[68px] relative flex items-center border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
+                                <div key={task.id} className="h-[72px] relative border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
                                   {/* 타임라인 바 (도형) */}
                                   <div
                                     onClick={() => handleEditTask(task)}
                                     title={`${task.name} (${task.progress}% 완료)`}
-                                    className={`absolute h-7 rounded-lg flex items-center justify-center px-2 text-[10px] font-extrabold text-white shadow-sm overflow-hidden transition-all duration-300 ${phaseColor.bar} cursor-pointer hover:opacity-90 max-w-full`}
+                                    className="absolute h-7 rounded-lg flex items-center justify-center px-2 text-[10px] font-extrabold text-slate-800 border border-slate-200/80 bg-slate-50/60 shadow-sm overflow-hidden transition-all duration-300 cursor-pointer hover:opacity-90 max-w-full"
                                     style={{
                                       left: `${barPlacement.left}%`,
                                       width: `${barPlacement.width}%`,
-                                      top: '8px'
+                                      top: '12px'
                                     }}
                                   >
                                     <div
-                                      className="bg-white/20 absolute left-0 top-0 bottom-0 transition-all duration-700"
+                                      className={`${phaseColor.bar} absolute left-0 top-0 bottom-0 transition-all duration-700`}
                                       style={{ width: `${task.progress}%` }}
                                     ></div>
-                                    <span className="relative z-10 filter drop-shadow text-white font-extrabold">
-                                      {task.hasOrder ? "📦 " : ""}{task.progress}%
+                                    <span className={`relative z-10 font-extrabold filter drop-shadow ${task.progress > 40 ? "text-white" : "text-slate-700"}`}>
+                                      {task.hasOrder ? "📦 " : ""}
+                                      {task.progress > 0 && task.progress < 100 ? `${task.progress}%` : ""}
                                     </span>
                                   </div>
 
@@ -2731,7 +3236,7 @@ export default function App() {
                                         style={{
                                           left: `${leadLeft}%`,
                                           width: `${leadWidth}%`,
-                                          top: '8px'
+                                          top: '12px'
                                         }}
                                       >
                                         <span className="truncate">🚚 납기:+{task.orderLeadTime}M</span>
@@ -2739,13 +3244,59 @@ export default function App() {
                                     );
                                   })()}
 
+                                  {/* 이정표 (Milestone) 각 항목의 진척률 그래프 끝 무렵 적절한 위치 배정 */}
+                                  {getTaskMilestones(task).map((m, mIdx) => {
+                                    const isDone = m.status === "완료";
+                                    const isWorking = m.status === "진행";
+                                    const iconColor = isDone ? "text-emerald-500 fill-emerald-500" : isWorking ? "text-indigo-500 fill-indigo-500" : "text-amber-500 fill-amber-500";
+                                    const badgeColor = isDone
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100/50"
+                                      : isWorking
+                                      ? "border-indigo-200 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-100/50"
+                                      : "border-amber-200 bg-amber-50 text-amber-800 ring-1 ring-amber-100/50";
+                                    
+                                    const baseLeft = barPlacement.left + barPlacement.width;
+                                    const leadWidth = task.hasOrder && task.orderLeadTime && showOrderLeadTimeOnGantt 
+                                      ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
+                                      : 0;
+                                    
+                                    let milestoneLeft = baseLeft + leadWidth + (mIdx * 12);
+                                    let offsetStyle: React.CSSProperties = {
+                                      left: `${milestoneLeft}%`,
+                                      top: '12px',
+                                      transform: 'translateX(6px)'
+                                    };
+                                    if (milestoneLeft > 85) {
+                                      const rightPct = 100 - (baseLeft + leadWidth);
+                                      offsetStyle = {
+                                        right: `${rightPct}%`,
+                                        top: '12px',
+                                        transform: 'translateX(-6px)'
+                                      };
+                                    }
+
+                                    return (
+                                      <div
+                                        key={m.id}
+                                        onClick={() => handleEditMilestone(m)}
+                                        title={`🚩 이정표: ${m.name} (${m.targetDate}) [상태: ${m.status}]`}
+                                        className={`absolute h-7 rounded-full border shadow-sm flex items-center space-x-1.5 px-3 py-1 cursor-pointer hover:scale-105 active:scale-95 hover:z-30 transition-all duration-150 text-[10px] font-black z-20 ${badgeColor}`}
+                                        style={offsetStyle}
+                                      >
+                                        <Flag className={`w-3 h-3 ${iconColor}`} />
+                                        <span className="truncate max-w-[125px]">{m.name}</span>
+                                        <span className="text-[8px] opacity-80 font-bold whitespace-nowrap">({m.targetDate.substring(5)})</span>
+                                      </div>
+                                    );
+                                  })}
+
                                   {/* 도형 바로 아래 텍스트 (줄바꿈 없이 노출) */}
                                   <div
                                     onClick={() => handleEditTask(task)}
-                                    className="absolute text-[11px] font-semibold text-slate-600 hover:text-indigo-600 cursor-pointer whitespace-nowrap z-10"
+                                    className="absolute text-[11px] font-semibold text-slate-500 hover:text-indigo-600 cursor-pointer whitespace-nowrap z-10"
                                     style={{
                                       left: `${barPlacement.left}%`,
-                                      top: '38px'
+                                      top: '44px'
                                     }}
                                   >
                                     {task.name}
@@ -2762,13 +3313,22 @@ export default function App() {
                 </div>
 
               </div>
+            )}
 
             </div>
           )}
 
           {/* ================= 탭 3: 마일스톤 관리 및 퀵 업데이트 ================= */}
-          {activeTab === "milestones" && (
+          {(isCleanView || activeTab === "milestones") && (
             <div className="space-y-6 animate-fadeIn">
+              {isCleanView && (
+                <div className="border-b-2 border-slate-900 pb-3.5 mt-8">
+                  <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                    <span className="bg-slate-900 text-white rounded-lg text-xs px-3 py-1 font-mono tracking-widest">SECTION 3</span>
+                    <span className="tracking-tight text-slate-800">🚩 프로젝트 핵심 이정표 현황 (Milestones Ledger)</span>
+                  </h3>
+                </div>
+              )}
               
               <div className="flex justify-between items-center mb-1">
                 <div>
@@ -2781,13 +3341,15 @@ export default function App() {
                     <strong> Quick Update </strong>를 이용하면 진척도와 진행단계를 원클릭으로 수정할 수 있습니다.
                   </p>
                 </div>
-                <button
-                  onClick={handleOpenAddMilestone}
-                  className="p-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/15 cursor-pointer flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>마일스톤 신규 추가</span>
-                </button>
+                {!isCleanView && (
+                  <button
+                    onClick={handleOpenAddMilestone}
+                    className="p-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/15 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>마일스톤 신규 추가</span>
+                  </button>
+                )}
               </div>
 
               {/* 밀스톤 타임 그리드 분포 모델 */}
@@ -2871,14 +3433,16 @@ export default function App() {
                               {m.name}
                             </h3>
                           </div>
-                          <button
-                            onClick={() => handleOpenQuickUpdate(m)}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-800 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0"
-                            title="진척도 신속 갱신"
-                          >
-                            <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-300" />
-                            <span>Quick Update</span>
-                          </button>
+                          {!isCleanView && (
+                            <button
+                              onClick={() => handleOpenQuickUpdate(m)}
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-800 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                              title="진척도 신속 갱신"
+                            >
+                              <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-300" />
+                              <span>Quick Update</span>
+                            </button>
+                          )}
                         </div>
 
                         <div className="p-5 flex-1 flex flex-col space-y-5">
@@ -2940,16 +3504,18 @@ export default function App() {
                             <UserCheck className="w-4 h-4 mr-1 text-slate-400" />
                             인계 소유자: {m.owner || "미지정"}
                           </span>
-                          <div className="space-x-3 shrink-0 flex items-center">
-                            <button onClick={() => handleEditMilestone(m)} className="text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-0.5 cursor-pointer">
-                              <Edit2 className="w-3.5 h-3.5" />
-                              <span>수정</span>
-                            </button>
-                            <button onClick={() => handleDeleteMilestone(m.id)} className="text-slate-400 hover:text-rose-600 transition-colors flex items-center gap-0.5 cursor-pointer">
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>삭제</span>
-                            </button>
-                          </div>
+                           {!isCleanView && (
+                            <div className="space-x-3 shrink-0 flex items-center">
+                              <button onClick={() => handleEditMilestone(m)} className="text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-0.5 cursor-pointer">
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span>수정</span>
+                              </button>
+                              <button onClick={() => handleDeleteMilestone(m.id)} className="text-slate-400 hover:text-rose-600 transition-colors flex items-center gap-0.5 cursor-pointer">
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>삭제</span>
+                              </button>
+                            </div>
+                           )}
                         </div>
 
                       </div>
@@ -2961,8 +3527,16 @@ export default function App() {
           )}
 
           {/* ================= 탭 4: 리스크 레지스터 ================= */}
-          {activeTab === "risks" && (
+          {(isCleanView || activeTab === "risks") && (
             <div className="space-y-6 animate-fadeIn">
+              {isCleanView && (
+                <div className="border-b-2 border-slate-900 pb-3.5 mt-8">
+                  <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                    <span className="bg-slate-900 text-white rounded-lg text-xs px-3 py-1 font-mono tracking-widest">SECTION 4</span>
+                    <span className="tracking-tight text-slate-800">⚡ 프로젝트 위험 대장 (Critical Risks Management Ledger)</span>
+                  </h3>
+                </div>
+              )}
               
               <div className="flex justify-between items-center mb-1">
                 <div>
@@ -2974,13 +3548,15 @@ export default function App() {
                     일정 신뢰도를 실시간으로 위협하는 변수들을 탐지하고 대응 완화전략(Mitigation)을 세웁니다.
                   </p>
                 </div>
-                <button
-                  onClick={handleOpenAddRisk}
-                  className="p-2.5 px-4 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-500/15 cursor-pointer flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>새로운 위험 등록</span>
-                </button>
+                {!isCleanView && (
+                  <button
+                    onClick={handleOpenAddRisk}
+                    className="p-2.5 px-4 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-500/15 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>새로운 위험 등록</span>
+                  </button>
+                )}
               </div>
 
               {/* 리스크 마스터 그리드 테이블 */}
@@ -2994,13 +3570,13 @@ export default function App() {
                         <th className="p-4 w-48">전파 영향 이정표</th>
                         <th className="p-4 w-32">위험 전개 식</th>
                         <th className="p-4 w-32">조치 관리상태</th>
-                        <th className="p-4 text-center w-24">옵션</th>
+                        {!isCleanView && <th className="p-4 text-center w-24">옵션</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {risks.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="text-center py-16 text-slate-400 text-sm">
+                          <td colSpan={isCleanView ? 5 : 6} className="text-center py-16 text-slate-400 text-sm">
                             등록된 안전 위협 리스크가 없습니다. 평화로운 마스터플랜 가동 중입니다.
                           </td>
                         </tr>
@@ -3058,16 +3634,18 @@ export default function App() {
                                   </p>
                                 </td>
 
-                                <td className="p-4 text-center">
-                                  <div className="flex justify-center items-center space-x-2.5">
-                                    <button onClick={() => handleEditRisk(r)} className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors" title="위험 사양 변경">
-                                      <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button onClick={() => handleDeleteRisk(r.id)} className="text-slate-400 hover:text-rose-600 cursor-pointer transition-colors" title="이 위험 제명">
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </td>
+                                {!isCleanView && (
+                                  <td className="p-4 text-center">
+                                    <div className="flex justify-center items-center space-x-2.5">
+                                      <button onClick={() => handleEditRisk(r)} className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors" title="위험 사양 변경">
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+                                      <button onClick={() => handleDeleteRisk(r.id)} className="text-slate-400 hover:text-rose-600 cursor-pointer transition-colors" title="이 위험 제명">
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
 
                               </tr>
                             );
