@@ -2386,13 +2386,23 @@ export default function App() {
                   </label>
                   
                   {!isCleanView && (
-                    <button
-                      onClick={handleOpenAddTask}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>태스크 추가</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleOpenAddPhase}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-md shadow-emerald-600/10 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>단계 추가</span>
+                      </button>
+                      
+                      <button
+                        onClick={handleOpenAddTask}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>태스크 추가</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2472,11 +2482,14 @@ export default function App() {
                                 </div>
                                 {/* 2행: 일 */}
                                 <div className="flex justify-between px-1 py-1.5 text-[8px] font-mono font-medium text-slate-400/80 bg-white/95">
-                                  {days.map(day => (
-                                    <span key={day} className="flex-1 text-center text-[7.5px] scale-[0.85] leading-none min-w-[2px]">
-                                      {day}
-                                    </span>
-                                  ))}
+                                  {days.map(day => {
+                                    const isTargetDay = day === 1 || day % 5 === 0;
+                                    return (
+                                      <span key={day} className={`flex-1 text-center text-[7.5px] scale-[0.85] leading-none min-w-[2px] ${isTargetDay ? "font-bold text-slate-500" : "text-slate-300/40"}`}>
+                                        {isTargetDay ? day : "·"}
+                                      </span>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );
@@ -3218,11 +3231,14 @@ export default function App() {
                             </div>
                             {/* 2행: 일 */}
                             <div className="flex justify-between px-1 py-1.5 text-[8px] font-mono font-medium text-slate-400/80 bg-white/95">
-                              {days.map(day => (
-                                <span key={day} className="flex-1 text-center text-[7.5px] scale-[0.85] leading-none min-w-[2px]">
-                                  {day}
-                                </span>
-                              ))}
+                              {days.map(day => {
+                                const isTargetDay = day === 1 || day % 5 === 0;
+                                return (
+                                  <span key={day} className={`flex-1 text-center text-[7.5px] scale-[0.85] leading-none min-w-[2px] ${isTargetDay ? "font-bold text-slate-500" : "text-slate-300/40"}`}>
+                                    {isTargetDay ? day : "·"}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </div>
                         );
