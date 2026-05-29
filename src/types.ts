@@ -20,6 +20,10 @@ export interface Task {
   endDate: string;
   progress: number;
   owner: string;
+  memo?: string;
+  imageUrl?: string;
+  hasOrder?: boolean;
+  orderLeadTime?: number; // 개월 단위 예상 납기 (예: 1, 2, 3...)
 }
 
 export interface Milestone {

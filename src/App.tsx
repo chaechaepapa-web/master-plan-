@@ -28,7 +28,10 @@ import {
   LogIn,
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  Image,
+  Upload,
+  Camera
 } from "lucide-react";
 import { ProjectInfo, Phase, Task, Milestone, Risk } from "./types";
 
@@ -49,8 +52,8 @@ const defaultPhases: Phase[] = [
 const defaultTasks: Task[] = [
   { id: "t1", phaseId: "p1", name: "비즈니스 요구분석서 최종 합의", startDate: "2026-06-01", endDate: "2026-06-15", progress: 100, owner: "김PM" },
   { id: "t2", phaseId: "p1", name: "WBS 승인 및 마스터플랜 픽스", startDate: "2026-06-16", endDate: "2026-06-30", progress: 100, owner: "김PM" },
-  { id: "t3", phaseId: "p2", name: "DB 모델링 / ERD 작성", startDate: "2026-07-01", endDate: "2026-07-15", progress: 80, owner: "이아키" },
-  { id: "t4", phaseId: "p2", name: "API 스펙 문서 작성", startDate: "2026-07-10", endDate: "2026-07-25", progress: 60, owner: "강서버" },
+  { id: "t3", phaseId: "p2", name: "DB 모델링 / 메인 서버 하드웨어 장비 발주", startDate: "2026-07-01", endDate: "2026-07-15", progress: 80, owner: "이아키", hasOrder: true, orderLeadTime: 3 },
+  { id: "t4", phaseId: "p2", name: "API 스펙 문서 작성 및 상용 솔루션 라이선스 발주", startDate: "2026-07-10", endDate: "2026-07-25", progress: 60, owner: "강서버", hasOrder: true, orderLeadTime: 2 },
   { id: "t5", phaseId: "p3", name: "인하우스 테스트용 알파 릴리즈", startDate: "2026-08-01", endDate: "2026-09-15", progress: 10, owner: "박개발" },
   { id: "t6", phaseId: "p3", name: "QA팀 검증 및 픽스 (베타 릴리즈)", startDate: "2026-09-20", endDate: "2026-11-20", progress: 0, owner: "최보안" }
 ];
@@ -246,6 +249,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<"projects" | "dashboard" | "gantt" | "milestones" | "risks">("projects");
   const [showMilestonesOnGantt, setShowMilestonesOnGantt] = useState<boolean>(true);
+  const [showOrderLeadTimeOnGantt, setShowOrderLeadTimeOnGantt] = useState<boolean>(true);
   const [toast, setToast] = useState<{ show: boolean; msg: string }>({ show: false, msg: "" });
 
   // ✏️ 편집 모드 및 커스텀 레이블 텍스트 상태 영속 제어
@@ -275,6 +279,44 @@ export default function App() {
   // 모달 제어용 상태
   const [activeModal, setActiveModal] = useState<string | null>(null);
 
+  // --- 스크린샷 캡처용 깔끔한 보기(클린 뷰) 및 검색·필터링 상태 ---
+  const [isCleanView, setIsCleanView] = useState<boolean>(false);
+  const [filterOwner, setFilterOwner] = useState<string>("All");
+  const [filterProgress, setFilterProgress] = useState<string>("All"); // All, Completed, Ongoing, NotStarted
+  const [filterHasOrder, setFilterHasOrder] = useState<string>("All"); // All, Yes, No
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // 필터가 가미된 연동 고유 담당자 리스트 자동 추출
+  const allTaskOwners = Array.from(new Set(tasks.map(t => t.owner).filter(Boolean)));
+
+  // 필터가 반영된 디테일 태스크 목록 산출 헬퍼 함수
+  const getFilteredTasks = (taskList: Task[] = tasks) => {
+    return taskList.filter((task) => {
+      // 1. 담당자 필터
+      if (filterOwner !== "All" && task.owner !== filterOwner) return false;
+      
+      // 2. 발주품 연계 여부 필터
+      if (filterHasOrder === "Yes" && !task.hasOrder) return false;
+      if (filterHasOrder === "No" && task.hasOrder) return false;
+      
+      // 3. 진척율 필터
+      if (filterProgress === "Completed" && task.progress !== 100) return false;
+      if (filterProgress === "Ongoing" && (task.progress === 0 || task.progress === 100)) return false;
+      if (filterProgress === "NotStarted" && task.progress !== 0) return false;
+      
+      // 4. 업무 타이틀 및 메모 퀵 검색 매칭
+      if (searchQuery.trim() !== "") {
+        const query = searchQuery.toLowerCase();
+        const nameMatch = task.name.toLowerCase().includes(query);
+        const ownerMatch = task.owner ? task.owner.toLowerCase().includes(query) : false;
+        const memoMatch = task.memo ? task.memo.toLowerCase().includes(query) : false;
+        if (!nameMatch && !ownerMatch && !memoMatch) return false;
+      }
+      
+      return true;
+    });
+  };
+
   // 현재 활성화 및 편집 중인 객체 백업 상태
   const [editingProject, setEditingProject] = useState<ProjectInfo>({ ...project });
   const [editingPhase, setEditingPhase] = useState<Partial<Phase>>({});
@@ -282,6 +324,9 @@ export default function App() {
   const [editingMilestone, setEditingMilestone] = useState<Partial<Milestone>>({});
   const [quickMilestone, setQuickMilestone] = useState<{ id: string; name: string; status: '완료' | '진행' | '예정'; progress: number } | null>(null);
   const [editingRisk, setEditingRisk] = useState<Partial<Risk>>({});
+  const [activePreviewImageUrl, setActivePreviewImageUrl] = useState<string | null>(null);
+  const [quickMemoTaskId, setQuickMemoTaskId] = useState<string | null>(null);
+  const [quickMemoText, setQuickMemoText] = useState<string>("");
 
   // 시스템 기준 날짜 (현재 local time: 2026-05-28)
   const todayStr = "2026-05-28";
@@ -372,6 +417,27 @@ export default function App() {
       return "Yellow";
     }
     return "Green";
+  };
+
+  // --- 발주품 예상 납기(리드타임) 연장 바 폭 계산 엔진 ---
+  const getLeadTimeWidthPercent = (endDateStr: string, leadTimeMonths: number) => {
+    const projStart = new Date(project.startDate).getTime();
+    const projEnd = new Date(project.endDate).getTime();
+    const totalDuration = projEnd - projStart;
+    if (totalDuration <= 0) return 0;
+
+    const taskEnd = new Date(endDateStr);
+    const leadEnd = new Date(taskEnd);
+    leadEnd.setMonth(leadEnd.getMonth() + leadTimeMonths);
+    
+    const taskEndTime = taskEnd.getTime();
+    let leadEndTime = leadEnd.getTime();
+    if (leadEndTime > projEnd) leadEndTime = projEnd; // 프로젝트 만료 기한 클리핑
+
+    const leadSpan = leadEndTime - taskEndTime;
+    if (leadSpan <= 0) return 0;
+
+    return (leadSpan / totalDuration) * 100;
   };
 
   // --- 타임라인 바 가로 백분율 위치 연산 엔진 ---
@@ -771,6 +837,25 @@ export default function App() {
 
   const handleUpdateTaskProgressInline = (id: string, progress: number) => {
     setTasks(tasks.map(t => t.id === id ? { ...t, progress } : t));
+  };
+
+  const handleSaveQuickMemo = (taskId: string) => {
+    setTasks(tasks.map(t => t.id === taskId ? { ...t, memo: quickMemoText } : t));
+    setQuickMemoTaskId(null);
+    setQuickMemoText("");
+    showToast("📝 간단 자필 메모 항목이 즉각 업데이트되었습니다.");
+  };
+
+  const handleQuickImageUpload = (taskId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setTasks(tasks.map(t => t.id === taskId ? { ...t, imageUrl: reader.result as string } : t));
+        showToast("📸 업로드하신 참고 사진이 등록되었습니다.");
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // 4. 마일스톤(Milestone) CRUD
@@ -1456,7 +1541,7 @@ export default function App() {
     <div className="h-screen w-full flex overflow-hidden bg-white text-slate-800 font-sans antialiased">
       
       {/* 1. 사이드바 내비게이션 레일 */}
-      <aside className="w-72 bg-white text-slate-800 flex flex-col flex-shrink-0 z-20 shadow-xl border-r border-slate-200/80">
+      <aside className={`w-72 bg-white text-slate-800 flex flex-col flex-shrink-0 z-20 shadow-xl border-r border-slate-200/80 transition-all duration-300 ${isCleanView ? "hidden" : ""}`}>
         <div className="p-6 border-b border-slate-100 flex items-center space-x-4">
           <div className="bg-gradient-to-tr from-indigo-600 to-indigo-400 p-2.5 rounded-xl text-white shadow-lg shadow-indigo-500/20">
             <HeartPulse className="w-6 h-6 animate-pulse" />
@@ -1576,24 +1661,31 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         
         {/* 최상단 마스터 헤더 바 */}
-        <header className="bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center flex-shrink-0 shadow-sm z-10">
+        <header className={`border-b border-slate-200 px-8 ${isCleanView ? "py-3.5 bg-slate-50/70" : "py-5 bg-white"} flex justify-between items-center flex-shrink-0 shadow-sm z-10 transition-all duration-200`}>
           <div className="flex items-center space-x-4">
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900">
-                  {project.title}
+                <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                  <span>{project.title}</span>
+                  {isCleanView && (
+                    <span className="text-[10px] bg-indigo-600 text-white rounded px-2 py-0.5 font-bold uppercase tracking-widest block shrink-0 animate-pulse">
+                      📸 캡처 정돈 뷰
+                    </span>
+                  )}
                 </h2>
-                <button
-                  onClick={() => {
-                    setEditingProject({ ...project });
-                    setActiveModal("projectSettings");
-                  }}
-                  className="p-1 px-2.5 bg-slate-50 border border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 rounded-lg text-xs font-semibold tracking-wide transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
-                  title="프로젝트 스펙 변경"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  <span>스펙 수정</span>
-                </button>
+                {!isCleanView && (
+                  <button
+                    onClick={() => {
+                      setEditingProject({ ...project });
+                      setActiveModal("projectSettings");
+                    }}
+                    className="p-1 px-2.5 bg-slate-50 border border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 rounded-lg text-xs font-semibold tracking-wide transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
+                    title="프로젝트 스펙 변경"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>스펙 수정</span>
+                  </button>
+                )}
               </div>
               <div className="flex items-center space-x-4 mt-2">
                 <span className="text-xs font-semibold text-slate-500 flex items-center">
@@ -1615,71 +1707,223 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* ✏️ 편집 모드 전환 통합 토글 */}
+            {/* 📸 스크린샷 캡처용 깔끔한 보기 토글 */}
             <button
               onClick={() => {
-                const nextEditMode = !isEditMode;
-                setIsEditMode(nextEditMode);
-                showToast(nextEditMode ? "✏️ 편집 모드가 활성화되었습니다. 사이드바의 로고나 메뉴명을 클릭하여 수정하세요!" : "🔒 편집 모드가 비활성화되어, 수정 내용이 안전하게 저장되었습니다.");
+                const nextClean = !isCleanView;
+                setIsCleanView(nextClean);
+                if (nextClean) {
+                  showToast("📸 스크린샷 전용 정돈 모드가 적용되었습니다. 사이드바와 편집 단추들이 깔끔하게 정리됩니다.");
+                } else {
+                  showToast("🔄 일반 조작 및 양방향 편집 관리 모드로 복귀했습니다.");
+                }
               }}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border cursor-pointer ${
-                isEditMode 
-                  ? "bg-amber-500 border-amber-400 text-white hover:bg-amber-600 hover:scale-[1.01]" 
-                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                isCleanView 
+                  ? "bg-slate-900 border-slate-800 text-white hover:bg-slate-800 hover:scale-[1.01]" 
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100"
               }`}
+              title="스크린샷 촬영을 위한 클린 뷰 전환"
             >
-              <span>{isEditMode ? "💾 편집완료 (저장)" : "✏️ 설명문/메뉴 편집개시"}</span>
+              <Camera className="w-3.5 h-3.5" />
+              <span>{isCleanView ? "📸 일반 관리 뷰" : "📸 캡처 정돈 뷰"}</span>
             </button>
+
+            {/* ✏️ 편집 모드 전환 통합 토글 - 클린 뷰일 때 숨김 */}
+            {!isCleanView && (
+              <button
+                onClick={() => {
+                  const nextEditMode = !isEditMode;
+                  setIsEditMode(nextEditMode);
+                  showToast(nextEditMode ? "✏️ 편집 모드가 활성화되었습니다. 설명문, 헤더명, 메뉴를 자유롭게 편집하세요!" : "🔒 편집 모드가 비활성화되어, 수정 내용이 안전하게 저장되었습니다.");
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border cursor-pointer ${
+                  isEditMode 
+                    ? "bg-amber-500 border-amber-400 text-white hover:bg-amber-600 hover:scale-[1.01]" 
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <span>{isEditMode ? "💾 편집완료 (저장)" : "✏️ 설명문/메뉴 편집개시"}</span>
+              </button>
+            )}
 
             {/* 실시간 헬스 신호등 배지 */}
             <div
-            className={`flex items-center space-x-3 px-5 py-2.5 rounded-full border shadow-sm transition-all duration-300 ${
-              projectHealth === "Green"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                : projectHealth === "Yellow"
-                ? "bg-amber-50 border-amber-200 text-amber-800"
-                : "bg-rose-50 border-rose-200 text-rose-800"
-            }`}
-          >
-            <div className="relative flex h-3 w-3">
-              <span
-                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  projectHealth === "Green"
-                    ? "bg-emerald-400"
-                    : projectHealth === "Yellow"
-                    ? "bg-amber-400"
-                    : "bg-rose-400"
-                }`}
-              ></span>
-              <span
-                className={`relative inline-flex rounded-full h-3 w-3 ${
-                  projectHealth === "Green"
-                    ? "bg-emerald-500"
-                    : projectHealth === "Yellow"
-                    ? "bg-amber-500"
-                    : "bg-rose-600"
-                }`}
-              ></span>
+              className={`flex items-center space-x-3 px-5 py-2.5 rounded-full border shadow-sm transition-all duration-300 ${
+                projectHealth === "Green"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : projectHealth === "Yellow"
+                  ? "bg-amber-50 border-amber-200 text-amber-800"
+                  : "bg-rose-50 border-rose-200 text-rose-800"
+              }`}
+            >
+              <div className="relative flex h-3 w-3">
+                <span
+                  className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                    projectHealth === "Green"
+                      ? "bg-emerald-400"
+                      : projectHealth === "Yellow"
+                      ? "bg-amber-400"
+                      : "bg-rose-400"
+                  }`}
+                ></span>
+                <span
+                  className={`relative inline-flex rounded-full h-3 w-3 ${
+                    projectHealth === "Green"
+                      ? "bg-emerald-500"
+                      : projectHealth === "Yellow"
+                      ? "bg-amber-500"
+                      : "bg-rose-600"
+                  }`}
+                ></span>
+              </div>
+              <span className="text-sm font-bold tracking-wide">
+                {projectHealth === "Green" ? "정상 가동 (On Track)" : projectHealth === "Yellow" ? "주의 관찰 (At Risk)" : "동력 상실 (Off Track)"}
+              </span>
             </div>
-            <span className="text-sm font-bold tracking-wide">
-              {projectHealth === "Green" ? "정상 가동 (On Track)" : projectHealth === "Yellow" ? "주의 관찰 (At Risk)" : "동력 상실 (Off Track)"}
-            </span>
-          </div>
 
-          <button
-            onClick={() => {
-              sessionStorage.removeItem("hb_logged_in");
-              setIsLoggedIn(false);
-              showToast("🔒 성공적으로 로그아웃되었습니다.");
-            }}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 hover:text-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-            title="로그아웃"
-          >
-            <LogIn className="w-3.5 h-3.5 rotate-180" />
-            <span>로그아웃</span>
-          </button>
+            {/* 로그아웃 버튼 - 클린 뷰 일 때 숨김 */}
+            {!isCleanView && (
+              <button
+                onClick={() => {
+                  sessionStorage.removeItem("hb_logged_in");
+                  setIsLoggedIn(false);
+                  showToast("🔒 성공적으로 로그아웃되었습니다.");
+                }}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 hover:text-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="로그아웃"
+              >
+                <LogIn className="w-3.5 h-3.5 rotate-180" />
+                <span>로그아웃</span>
+              </button>
+            )}
           </div>
         </header>
+
+        {/* 글로벌 조건 필터 및 실시간 캡처용 조율 패널 */}
+        <div className="bg-slate-50 border-b border-slate-200 px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 shrink-0 transition-all">
+          {isCleanView ? (
+            // 클린뷰 작동 중일 때의 인쇄/캡처 최적화 요약 필터 배지
+            <div className="flex items-center space-x-2.5 text-xs font-semibold text-slate-500 py-1">
+              <span className="flex items-center gap-1 bg-indigo-50 border border-indigo-100/80 px-2.5 py-1 rounded-full text-[10px] text-indigo-700">
+                <ShieldCheck className="w-3 h-3 text-indigo-500" />
+                <strong>📸 캡처 전용 정돈 모드 활성 중 (사이드바 및 수정 도구 미출력)</strong>
+              </span>
+              {(filterOwner !== "All" || filterProgress !== "All" || filterHasOrder !== "All" || searchQuery.trim() !== "") ? (
+                <span className="flex items-center gap-1 bg-amber-50 border border-amber-100/80 px-2.5 py-1 rounded-full text-[10px] text-amber-700">
+                  <span>지정 필터 가동 중: </span>
+                  {filterOwner !== "All" && <span className="font-extrabold font-mono">[{filterOwner}]</span>}
+                  {filterProgress !== "All" && <span className="font-extrabold font-mono">[{filterProgress === "Completed" ? "완료" : filterProgress === "Ongoing" ? "진행중" : "미시작"}]</span>}
+                  {filterHasOrder !== "All" && <span className="font-extrabold font-mono">[{filterHasOrder === "Yes" ? "발주품연관" : "발주품없음"}]</span>}
+                  {searchQuery.trim() !== "" && <span className="font-extrabold font-mono">['{searchQuery}']</span>}
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-400 font-medium">전체 데이터 투명 표출 상태</span>
+              )}
+            </div>
+          ) : (
+            // 일반 관리 중일 때 조작 가능한 친절하고 강력한 필터 정렬판
+            <div className="flex flex-wrap items-center gap-3 w-full">
+              <div className="flex items-center space-x-1.5 text-xs font-extrabold text-slate-700 mr-2 shrink-0">
+                <ChartPie className="w-4 h-4 text-indigo-500" />
+                <span>데이터 필터 대시보드 :</span>
+              </div>
+              
+              {/* 1. 담당자 필터 */}
+              <div className="flex items-center space-x-1.5">
+                <span className="text-[10px] text-slate-400 font-black uppercase">담당자</span>
+                <select
+                  value={filterOwner}
+                  onChange={(e) => setFilterOwner(e.target.value)}
+                  className="bg-white border border-slate-200 hover:border-slate-350 text-slate-700 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300 cursor-pointer font-bold font-mono transition-all"
+                >
+                  <option value="All">전체 (All)</option>
+                  {allTaskOwners.map(owner => (
+                    <option key={owner} value={owner}>{owner}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. 진척도 필터 */}
+              <div className="flex items-center space-x-1.5">
+                <span className="text-[10px] text-slate-400 font-black uppercase">진척도</span>
+                <select
+                  value={filterProgress}
+                  onChange={(e) => setFilterProgress(e.target.value)}
+                  className="bg-white border border-slate-200 hover:border-slate-350 text-slate-700 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300 cursor-pointer font-bold transition-all"
+                >
+                  <option value="All">진척 전체 (All)</option>
+                  <option value="Completed">완료업무 (100%)</option>
+                  <option value="Ongoing">진행업무 (1~99%)</option>
+                  <option value="NotStarted">미시작업무 (0%)</option>
+                </select>
+              </div>
+
+              {/* 3. 연동 발주품 필터 */}
+              <div className="flex items-center space-x-1.5">
+                <span className="text-[10px] text-slate-400 font-black uppercase">연동발주</span>
+                <select
+                  value={filterHasOrder}
+                  onChange={(e) => setFilterHasOrder(e.target.value)}
+                  className="bg-white border border-slate-200 hover:border-slate-350 text-slate-700 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300 cursor-pointer font-bold transition-all"
+                >
+                  <option value="All">발주 연관전체</option>
+                  <option value="Yes">📦 발주 연관만 표기</option>
+                  <option value="No">일반 업무만 표기</option>
+                </select>
+              </div>
+
+              {/* 4. 실시간 통합 텍스트 검색 */}
+              <div className="relative flex-1 max-w-xs min-w-[150px]">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="업무명 및 담당자 실시간 검색..."
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-300 font-bold transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer text-xs font-black p-0.5"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* 5. 필터 초기화 버튼 */}
+              {(filterOwner !== "All" || filterProgress !== "All" || filterHasOrder !== "All" || searchQuery.trim() !== "") && (
+                <button
+                  onClick={() => {
+                    setFilterOwner("All");
+                    setFilterProgress("All");
+                    setFilterHasOrder("All");
+                    setSearchQuery("");
+                    showToast("🔄 모든 검색 및 조건 필터가 투명하게 초기화되었습니다.");
+                  }}
+                  className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-black hover:bg-indigo-100 hover:text-indigo-800 transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95 animate-fadeIn"
+                  title="검색 및 필터 일괄 리셋"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>필터 초기화</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 클린뷰 해제용 콤팩트 스위치 */}
+          {isCleanView && (
+            <button
+              onClick={() => setIsCleanView(false)}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-md cursor-pointer flex items-center gap-1.5 shrink-0 animate-fadeIn"
+              title="관리용 일반 모드로 환원"
+            >
+              <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+              <span>일반 관리모드 환원</span>
+            </button>
+          )}
+        </div>
 
         {/* 탭 가변 뷰 스페이스 */}
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar font-sans">
@@ -1909,20 +2153,36 @@ export default function App() {
                     <span>마일스톤 동시 표시</span>
                   </label>
 
-                  <button
-                    onClick={handleOpenAddPhase}
-                    className="p-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 hover:text-indigo-600 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
-                  >
-                    <FolderPlus className="w-4 h-4 text-indigo-500" />
-                    <span>구분 단계 추가</span>
-                  </button>
-                  <button
-                    onClick={handleOpenAddTask}
-                    className="p-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>디테일 업무 추가</span>
-                  </button>
+                  {/* 간트 차트 발주 납기 토글 옵션 */}
+                  <label className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100/50 transition-all cursor-pointer select-none" title="발주품이 있는 업무 뒤에 예상 납기 연장 구간을 표출합니다.">
+                    <input
+                      type="checkbox"
+                      checked={showOrderLeadTimeOnGantt}
+                      onChange={(e) => setShowOrderLeadTimeOnGantt(e.target.checked)}
+                      className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>발주품 예상납기 시각화</span>
+                  </label>
+
+                  {!isCleanView && (
+                    <>
+                      <button
+                        onClick={handleOpenAddPhase}
+                        className="p-2.5 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 hover:text-indigo-600 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-1.5 animate-fadeIn"
+                      >
+                        <FolderPlus className="w-4 h-4 text-indigo-500" />
+                        <span>구분 단계 추가</span>
+                      </button>
+                      <button
+                        onClick={handleOpenAddTask}
+                        className="p-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center gap-1.5 animate-fadeIn"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>디테일 업무 추가</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1939,7 +2199,7 @@ export default function App() {
                   <div className="flex-1 overflow-y-auto max-h-[600px] divide-y divide-slate-100/70 custom-scrollbar">
                     {phases.map(phase => {
                       const phaseColor = getPhaseColorMap(phase.color);
-                      const phaseTasks = tasks.filter(t => t.phaseId === phase.id);
+                      const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === phase.id);
                       const parentProgress = phaseTasks.length > 0
                         ? Math.round(phaseTasks.reduce((acc, task) => acc + task.progress, 0) / phaseTasks.length)
                         : 0;
@@ -1975,49 +2235,167 @@ export default function App() {
                           </div>
 
                           {/* Task Child Component List */}
-                          {phaseTasks.map(task => (
-                            <div key={task.id} className="pl-8 pr-4 h-[68px] bg-slate-50/20 hover:bg-slate-50/70 flex justify-between items-center border-b border-slate-100/60 group transition-all">
-                              <div className="min-w-0 pr-3 flex-1">
-                                <p
-                                  onClick={() => handleEditTask(task)}
-                                  className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate"
-                                  title="태스크 상세 정보 변경"
-                                >
-                                  {task.name}
-                                </p>
-                                <div className="flex items-center space-x-3 mt-1 text-[10px] text-slate-400 font-bold">
-                                  <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                                    <User className="w-3 h-3 text-slate-400" />
-                                    {task.owner || "미지정"}
-                                  </span>
-                                  <span>{task.startDate} ~ {task.endDate}</span>
-                                </div>
-                              </div>
+                          {phaseTasks.map(task => {
+                            const isMemoEditing = quickMemoTaskId === task.id;
 
-                              <div className="flex items-center space-x-3 flex-shrink-0">
-                                <div className="flex items-center space-x-2">
-                                  <input
-                                    type="range"
-                                    min="0"
-                                    max="100"
-                                    value={task.progress}
-                                    onChange={(e) => handleUpdateTaskProgressInline(task.id, parseInt(e.target.value))}
-                                    className="w-16 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                                    title="인라인 진척률 직접 튜닝"
-                                  />
-                                  <span className="text-[10px] font-extrabold text-slate-500 w-8 text-right shrink-0">{task.progress}%</span>
+                            return (
+                              <div
+                                key={task.id}
+                                className="pl-8 pr-4 min-h-[76px] py-3.5 bg-slate-50/20 hover:bg-slate-50/70 border-b border-slate-100/60 transition-all flex flex-col justify-center space-y-2.5 group"
+                              >
+                                <div className="flex justify-between items-start w-full gap-2">
+                                  <div className="min-w-0 pr-1 flex-1">
+                                    <p
+                                      onClick={() => handleEditTask(task)}
+                                      className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate"
+                                      title="태스크 상세 정보 변경"
+                                    >
+                                      {task.name}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1.5 text-[10px] text-slate-400 font-bold">
+                                      <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                        <User className="w-3 h-3 text-slate-400" />
+                                        {task.owner || "미지정"}
+                                      </span>
+                                      <span>{task.startDate} ~ {task.endDate}</span>
+                                      {task.hasOrder && (
+                                        <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded flex items-center gap-0.5" title="발주시 입고 예상 납기 연동 상태">
+                                          <span>📦 발주납기: <strong>{task.orderLeadTime || 1}M</strong></span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center space-x-2.5 flex-shrink-0">
+                                    {!isCleanView ? (
+                                      <div className="flex items-center space-x-1.5">
+                                        <input
+                                          type="range"
+                                          min="0"
+                                          max="100"
+                                          value={task.progress}
+                                          onChange={(e) => handleUpdateTaskProgressInline(task.id, parseInt(e.target.value))}
+                                          className="w-14 md:w-16 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                          title="인라인 진척률 직접 튜닝"
+                                        />
+                                        <span className="text-[10px] font-extrabold text-slate-500 w-8 text-right shrink-0">{task.progress}%</span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs font-extrabold text-slate-600 pr-2 shrink-0">{task.progress}%</span>
+                                    )}
+                                    {!isCleanView && (
+                                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 items-center bg-white/80 p-0.5 rounded-lg border border-slate-100 shadow-sm">
+                                        <button onClick={() => handleEditTask(task)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer" title="상세 정보">
+                                          <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="업무 삭제">
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 items-center">
-                                  <button onClick={() => handleEditTask(task)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer">
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
+
+                                {/* 메모 및 사진 퀵 컨트롤 버튼 - 클린 뷰에서는 숨김 */}
+                                {!isCleanView && (
+                                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                    {/* 메모 추가/수정 버튼 */}
+                                    <button
+                                      onClick={() => {
+                                        if (isMemoEditing) {
+                                          setQuickMemoTaskId(null);
+                                        } else {
+                                          setQuickMemoTaskId(task.id);
+                                          setQuickMemoText(task.memo || "");
+                                        }
+                                      }}
+                                      className={`px-2 py-0.5 rounded border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                                        task.memo 
+                                          ? "bg-amber-50/70 border-amber-200 text-amber-700 hover:bg-amber-50" 
+                                          : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300"
+                                      }`}
+                                    >
+                                      <FileText className="w-3 h-3 shrink-0" />
+                                      <span>{task.memo ? "메모 수정" : "메모 남기기"}</span>
+                                    </button>
+
+                                    {/* 기기 상 사진 파일 업로드 */}
+                                    <label className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all font-semibold">
+                                      <Camera className="w-3 h-3 shrink-0" />
+                                      <span>{task.imageUrl ? "사진 갱신" : "사진 올리기"}</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => handleQuickImageUpload(task.id, e)}
+                                      />
+                                    </label>
+                                  </div>
+                                )}
+
+                                {/* 인라인 퀵 메모 편집 영역 */}
+                                {isMemoEditing && (
+                                  <div className="bg-amber-50/20 border border-amber-200/40 rounded-xl p-2.5 space-y-2 mt-1.5 animate-fadeIn">
+                                    <textarea
+                                      value={quickMemoText}
+                                      onChange={(e) => setQuickMemoText(e.target.value)}
+                                      placeholder="이 구분 단계 또는 디테일 태스크에 명기할 정보 기입..."
+                                      rows={2}
+                                      className="w-full text-xs p-2 text-slate-800 bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400 placeholder-slate-400 font-medium"
+                                    />
+                                    <div className="flex justify-end gap-1.5">
+                                      <button
+                                        onClick={() => setQuickMemoTaskId(null)}
+                                        className="px-2 py-0.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-md text-[10px] font-bold cursor-pointer"
+                                      >
+                                        취소
+                                      </button>
+                                      <button
+                                        onClick={() => handleSaveQuickMemo(task.id)}
+                                        className="px-2.5 py-0.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white rounded-md text-[10px] font-bold cursor-pointer shadow-sm transition-all"
+                                      >
+                                        메모 저장
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* 저장된 메모 및 참고 사진 동시 표출 컨테이너 */}
+                                {(task.memo || task.imageUrl) && !isMemoEditing && (
+                                  <div className="flex flex-col gap-2 p-2.5 bg-indigo-50/20 border border-indigo-100/30 rounded-xl mt-1">
+                                    {task.memo && (
+                                      <div className="text-[11px] text-slate-600 leading-relaxed font-semibold flex items-start gap-1.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                                        <span>{task.memo}</span>
+                                      </div>
+                                    )}
+                                    {task.imageUrl && (
+                                      <div className="flex items-center gap-2">
+                                        <div className="relative shrink-0">
+                                          <img
+                                            src={task.imageUrl}
+                                            alt="첨부파일"
+                                            onClick={() => setActivePreviewImageUrl(task.imageUrl || null)}
+                                            className="w-10 h-10 rounded-lg object-cover cursor-zoom-in border border-slate-200 hover:scale-105 hover:border-slate-300 transition-all shadow-sm"
+                                            title="미리보기 (클릭)"
+                                          />
+                                        </div>
+                                        <div className="text-[9px] text-slate-400 font-bold shrink-0 flex flex-col">
+                                          <span>참고 스크린샷 연동 완료 (클릭 시 확대)</span>
+                                          <button
+                                            onClick={() => setTasks(tasks.map(t => t.id === task.id ? { ...t, imageUrl: undefined } : t))}
+                                            className="text-rose-500 hover:text-rose-600 text-left underline font-extrabold mt-0.5"
+                                          >
+                                            사진 지우기
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
 
                           {phaseTasks.length === 0 && (
                             <p className="text-[11px] py-3 text-slate-300 text-center italic">이 단계에 배속된 태스크가 없습니다.</p>
@@ -2115,7 +2493,7 @@ export default function App() {
                     <div className="flex-1 divide-y divide-slate-100/60 pb-3">
                       {phases.map(p => {
                         const phaseColor = getPhaseColorMap(p.color);
-                        const phaseTasks = tasks.filter(t => t.phaseId === p.id);
+                        const phaseTasks = getFilteredTasks(tasks).filter(t => t.phaseId === p.id);
 
                         return (
                           <div key={p.id}>
@@ -2142,8 +2520,31 @@ export default function App() {
                                       className="bg-white/20 absolute left-0 top-0 bottom-0 transition-all duration-700"
                                       style={{ width: `${task.progress}%` }}
                                     ></div>
-                                    <span className="relative z-10 filter drop-shadow text-white font-extrabold">{task.progress}%</span>
+                                    <span className="relative z-10 filter drop-shadow text-white font-extrabold">
+                                      {task.hasOrder ? "📦 " : ""}{task.progress}%
+                                    </span>
                                   </div>
+
+                                  {/* 예상 납기 리드타임 연장 바 시각 표출 */}
+                                  {task.hasOrder && task.orderLeadTime && showOrderLeadTimeOnGantt && (() => {
+                                    const leadWidth = getLeadTimeWidthPercent(task.endDate, task.orderLeadTime);
+                                    if (leadWidth <= 0) return null;
+                                    const leadLeft = barPlacement.left + barPlacement.width;
+                                    return (
+                                      <div
+                                        onClick={() => handleEditTask(task)}
+                                        title={`예상 납기: 완료일로부터 +${task.orderLeadTime}개월 소요 예상`}
+                                        className="absolute h-7 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50/50 flex items-center justify-center text-[9px] font-black text-amber-800 px-1.5 cursor-pointer hover:bg-amber-100/60 transition-all z-10 animate-pulse text-center"
+                                        style={{
+                                          left: `${leadLeft}%`,
+                                          width: `${leadWidth}%`,
+                                          top: '8px'
+                                        }}
+                                      >
+                                        <span className="truncate">🚚 납기:+{task.orderLeadTime}M</span>
+                                      </div>
+                                    );
+                                  })()}
 
                                   {/* 도형 바로 아래 텍스트 (줄바꿈 없이 노출) */}
                                   <div
@@ -2495,8 +2896,8 @@ export default function App() {
       {/* 1. 프로젝트 스펙 편집 모달 */}
       {activeModal === "projectSettings" && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl animate-modalEntrance">
-            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-modalEntrance">
+            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                 <Settings className="w-4.5 h-4.5 text-indigo-500" />
                 <span>프로젝트 정보 스펙 관리</span>
@@ -2506,7 +2907,7 @@ export default function App() {
               </button>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">프로젝트 명칭</label>
                 <input
@@ -2562,8 +2963,8 @@ export default function App() {
       {/* 2. 단계(Phase) 관리 팝업 */}
       {activeModal === "phase" && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl animate-modalEntrance">
-            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-modalEntrance">
+            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                 <FolderPlus className="w-4.5 h-4.5 text-indigo-500" />
                 <span>프로젝트 관리 대단계 설정</span>
@@ -2573,7 +2974,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">단계 이름 (Phase Name)</label>
                 <input
@@ -2617,8 +3018,8 @@ export default function App() {
       {/* 3. 태스크(Task) 관리 팝업 */}
       {activeModal === "task" && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl animate-modalEntrance">
-            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-modalEntrance">
+            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                 <CalendarDays className="w-4.5 h-4.5 text-indigo-500" />
                 <span>체크리스트 디테일 태스크 편집</span>
@@ -2628,7 +3029,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">속해 있는 개발 단계 (Phase)</label>
                 <select
@@ -2695,6 +3096,104 @@ export default function App() {
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
                 />
               </div>
+              <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 space-y-3">
+                <label className="flex items-center space-x-2.5 text-xs font-bold text-slate-750 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!editingTask.hasOrder}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setEditingTask({
+                        ...editingTask,
+                        hasOrder: checked,
+                        orderLeadTime: checked ? (editingTask.orderLeadTime || 1) : undefined
+                      });
+                    }}
+                    className="w-4.5 h-4.5 rounded text-indigo-650 border-slate-350 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span>📦 이 세부 업무에 연관 발주품이 존재합니다 (예상 납기 입력)</span>
+                </label>
+                
+                {editingTask.hasOrder && (
+                  <div className="bg-amber-50/40 border border-amber-200 rounded-xl p-3.5 space-y-2 mt-1 animate-fadeIn">
+                    <label className="block text-[11px] font-black text-amber-800">예상 입고 납기 (Lead Time 개월 단위)</label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max="24"
+                        value={editingTask.orderLeadTime || 1}
+                        onChange={(e) => setEditingTask({ ...editingTask, orderLeadTime: Math.max(1, parseInt(e.target.value) || 1) })}
+                        className="w-24 px-3 py-1.5 border border-amber-300 rounded-lg text-sm font-extrabold focus:outline-none focus:border-amber-500 bg-white text-amber-900"
+                      />
+                      <span className="text-xs font-bold text-amber-700">개월 후 입고 연동 예상</span>
+                    </div>
+                    <p className="text-[10px] text-amber-600 font-medium leading-relaxed">
+                      * 입력하신 예상 납기는 간트차트 마스터플랜의 업무 바(Bar) 종료일 뒤에 연장 표시 구간으로 시각화됩니다.
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span>간단 업무 보강 메모</span>
+                </label>
+                <textarea
+                  value={editingTask.memo || ""}
+                  onChange={(e) => setEditingTask({ ...editingTask, memo: e.target.value })}
+                  placeholder="예: 정합성 감사 필증 연장 서류 및 인력 보강 기획"
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 resize-none bg-white font-medium text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 flex items-center gap-1">
+                  <Camera className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <span>업무 참고 스크린샷 (사진 파일)</span>
+                </label>
+                {editingTask.imageUrl ? (
+                  <div className="relative border border-slate-200 rounded-xl p-2.5 bg-slate-50 flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5 min-w-0 flex-1 pr-2">
+                      <img src={editingTask.imageUrl} alt="preview" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+                      <span className="text-xs text-slate-650 font-bold truncate">등록된 참고 사진</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingTask({ ...editingTask, imageUrl: undefined })}
+                      className="px-2.5 py-1 bg-rose-50 border border-rose-100 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-150 active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      사진 삭제
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center w-full">
+                    <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-200 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100/50 hover:border-indigo-300 transition-all">
+                      <div className="flex flex-col items-center justify-center pt-3 pb-3">
+                        <Upload className="w-5 h-5 text-slate-400 mb-1" />
+                        <p className="text-xs text-slate-500 font-extrabold">여기를 클릭하여 파일 선택</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">PNG, JPG 등의 이미지 파일</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setEditingTask({ ...editingTask, imageUrl: reader.result as string });
+                              showToast("📸 참고 사진이 성공적으로 업로드되었습니다.");
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="p-4 bg-slate-50 flex justify-end space-x-2 border-t border-slate-100">
@@ -2712,8 +3211,8 @@ export default function App() {
       {/* 4. 마일스톤 이정표 전체 편집 팝업 */}
       {activeModal === "milestone" && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl animate-modalEntrance">
-            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-modalEntrance">
+            <div className="px-6 py-4.5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                 <Flag className="w-4.5 h-4.5 text-indigo-500" />
                 <span>마일스톤 주요 마디 기획</span>
@@ -2723,7 +3222,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">마일스톤 타이틀</label>
                 <input
@@ -2782,8 +3281,8 @@ export default function App() {
       {/* 5. 마일스톤 번개 퀵 업데이트 모달 */}
       {activeModal === "quickUpdate" && quickMilestone && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-modalEntrance">
-            <div className="px-6 py-4 border-b border-indigo-50 flex justify-between items-center bg-indigo-50/20">
+          <div className="bg-white rounded-2xl w-full max-w-sm max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-modalEntrance">
+            <div className="px-6 py-4 border-b border-indigo-50 flex justify-between items-center bg-indigo-50/20 shrink-0">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-500 fill-amber-300" />
                 <span>지표 초고속 업데이트 팝업</span>
@@ -2793,7 +3292,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 flex-1 overflow-y-auto">
               <div>
                 <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase block mb-1">업데이트 대상 </span>
                 <p className="text-sm font-extrabold text-indigo-700 truncate leading-relaxed">
@@ -2857,8 +3356,8 @@ export default function App() {
       {/* 6. 리스크(Risk) 생성 및 편집 모달 */}
       {activeModal === "risk" && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-lg overflow-hidden shadow-2xl animate-modalEntrance">
-            <div className="px-6 py-4.5 border-b border-rose-100 flex justify-between items-center bg-rose-50/40">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-modalEntrance">
+            <div className="px-6 py-4.5 border-b border-rose-100 flex justify-between items-center bg-rose-50/40 shrink-0">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                 <AlertTriangle className="w-4.5 h-4.5 text-rose-500 animate-pulse" />
                 <span>안전 및 일정 위협 리스크 포작제어</span>
@@ -2868,7 +3367,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">위험 사슬 장벽 마일스톤 (매핑)</label>
                 <select
@@ -3031,6 +3530,33 @@ export default function App() {
           {toast.msg}
         </span>
       </div>
+
+      {/* 9. 참고 사진 원본 확대 라이트박스 */}
+      {activePreviewImageUrl && (
+        <div 
+          className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[60] flex flex-col items-center justify-center p-4 cursor-zoom-out animate-fadeIn"
+          onClick={() => setActivePreviewImageUrl(null)}
+        >
+          <div className="relative max-w-4xl max-h-[85vh] overflow-hidden flex flex-col items-center">
+            <button
+              onClick={() => setActivePreviewImageUrl(null)}
+              className="absolute -top-12 right-0 bg-slate-800 text-white rounded-full p-2 hover:bg-slate-700 hover:scale-105 active:scale-95 transition-all shadow-md z-10 cursor-pointer"
+              title="닫기"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={activePreviewImageUrl}
+              alt="정밀 확대 사진"
+              className="rounded-2xl max-w-full max-h-[80vh] object-contain shadow-2xl border border-slate-700/50 cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="text-center mt-3 text-xs font-bold text-slate-300 pointer-events-none select-none bg-slate-800/80 px-4 py-1.5 rounded-full border border-slate-750">
+              구분 단계 연계 참고 원본 이미지 파일 (바탕 클릭 시 닫기)
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
