@@ -583,11 +583,23 @@ export default function App() {
     return "Green";
   };
 
+  // --- 날짜를 로컬 타임존 자정 기준 안전 파싱 헬퍼 ---
+  const parseSafeDate = (dateStr: string) => {
+    if (!dateStr || typeof dateStr !== "string") return new Date();
+    const parts = dateStr.split("-").map(num => parseInt(num, 10));
+    if (parts.length === 3 && !parts.some(isNaN)) {
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return new Date();
+    return d;
+  };
+
   // --- 발주품 예상 납기(리드타임) 연장 바 폭 계산 엔진 ---
   const getTimelineDateRange = () => {
     // Base range is project start and end dates
-    let startMs = new Date(project.startDate).getTime();
-    let endMs = new Date(project.endDate).getTime();
+    let startMs = parseSafeDate(project.startDate).getTime();
+    let endMs = parseSafeDate(project.endDate).getTime();
 
     if (isNaN(startMs)) startMs = new Date("2026-06-01").getTime();
     if (isNaN(endMs)) endMs = new Date("2026-12-31").getTime();
@@ -595,20 +607,20 @@ export default function App() {
     // Check all tasks
     tasks.forEach(t => {
       if (t.startDate) {
-        const tStart = new Date(t.startDate).getTime();
+        const tStart = parseSafeDate(t.startDate).getTime();
         if (!isNaN(tStart) && tStart < startMs) {
           startMs = tStart;
         }
       }
       if (t.endDate) {
-        const tEnd = new Date(t.endDate).getTime();
+        const tEnd = parseSafeDate(t.endDate).getTime();
         if (!isNaN(tEnd)) {
           if (tEnd > endMs) {
             endMs = tEnd;
           }
           // If there is order lead time, consider that as well
           if (t.hasOrder && t.orderLeadTime) {
-            const d = new Date(t.endDate);
+            const d = parseSafeDate(t.endDate);
             d.setMonth(d.getMonth() + t.orderLeadTime);
             const deliveryMs = d.getTime();
             if (!isNaN(deliveryMs) && deliveryMs > endMs) {
@@ -622,7 +634,7 @@ export default function App() {
     // Check all milestones
     milestones.forEach(m => {
       if (m.targetDate) {
-        const mDate = new Date(m.targetDate).getTime();
+        const mDate = parseSafeDate(m.targetDate).getTime();
         if (!isNaN(mDate)) {
           if (mDate < startMs) startMs = mDate;
           if (mDate > endMs) endMs = mDate;
@@ -650,14 +662,14 @@ export default function App() {
     return { 
       startDate: adjustedStart, 
       endDate: adjustedEnd,
-      startMs: new Date(adjustedStart).getTime(),
+      startMs: parseSafeDate(adjustedStart).getTime(),
       endMs: nextMonthDate.getTime()
     };
   };
 
   const getDeliveryDate = (endDateStr: string, leadTimeMonths: number) => {
     try {
-      const d = new Date(endDateStr);
+      const d = parseSafeDate(endDateStr);
       if (!isNaN(d.getTime())) {
         d.setMonth(d.getMonth() + leadTimeMonths);
         return d.toISOString().split("T")[0];
@@ -673,7 +685,7 @@ export default function App() {
     const totalDuration = projEnd - projStart;
     if (totalDuration <= 0) return 0;
 
-    const taskEnd = new Date(endDateStr);
+    const taskEnd = parseSafeDate(endDateStr);
     const leadEnd = new Date(taskEnd);
     leadEnd.setMonth(leadEnd.getMonth() + leadTimeMonths);
     
@@ -692,8 +704,8 @@ export default function App() {
     const range = getTimelineDateRange();
     const projStart = range.startMs;
     const projEnd = range.endMs;
-    let taskStart = new Date(startStr).getTime();
-    let taskEnd = new Date(endStr).getTime();
+    let taskStart = parseSafeDate(startStr).getTime();
+    let taskEnd = parseSafeDate(endStr).getTime();
 
     if (taskStart < projStart) taskStart = projStart;
     if (taskEnd > projEnd) taskEnd = projEnd;
@@ -774,7 +786,7 @@ export default function App() {
   };
 
   const getFractionalMonthIndex = (dateStr: string, displayedMonths: Date[]) => {
-    const d = new Date(dateStr);
+    const d = parseSafeDate(dateStr);
     const dTime = d.getTime();
     const N = displayedMonths.length;
     if (N === 0) return 0;
@@ -3169,11 +3181,10 @@ export default function App() {
                                           transform: 'translateX(6px)'
                                         };
                                         if (badgeLeft > 80) {
-                                          const rightPct = 100 - (baseLeft + leadWidth);
                                           offsetStyle = {
-                                            right: `${rightPct}%`,
+                                            left: `${badgeLeft}%`,
                                             top: '12px',
-                                            transform: 'translateX(-6px)'
+                                            transform: 'translateX(-100%) translateX(-6px)'
                                           };
                                         }
 
@@ -3651,11 +3662,10 @@ export default function App() {
                                       transform: 'translateX(6px)'
                                     };
                                     if (badgeLeft > 80) {
-                                      const rightPct = 100 - (baseLeft + leadWidth);
                                       offsetStyle = {
-                                        right: `${rightPct}%`,
+                                        left: `${badgeLeft}%`,
                                         top: '12px',
-                                        transform: 'translateX(-6px)'
+                                        transform: 'translateX(-100%) translateX(-6px)'
                                       };
                                     }
 
