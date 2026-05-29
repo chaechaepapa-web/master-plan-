@@ -31,7 +31,8 @@ import {
   EyeOff,
   Image,
   Upload,
-  Camera
+  Camera,
+  GripVertical
 } from "lucide-react";
 import { ProjectInfo, Phase, Task, Milestone, Risk } from "./types";
 
@@ -285,6 +286,12 @@ export default function App() {
   const [filterProgress, setFilterProgress] = useState<string>("All"); // All, Completed, Ongoing, NotStarted
   const [filterHasOrder, setFilterHasOrder] = useState<string>("All"); // All, Yes, No
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // --- 드래그 앤 드롭을 통한 태스크 및 구분 단계(Phase) 순서 제어 상태 ---
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [draggedPhaseId, setDraggedPhaseId] = useState<string | null>(null);
+  const [dragOverPhaseId, setDragOverPhaseId] = useState<string | null>(null);
 
   // 필터가 가미된 연동 고유 담당자 리스트 자동 추출
   const allTaskOwners = Array.from(new Set(tasks.map(t => t.owner).filter(Boolean)));
@@ -837,6 +844,143 @@ export default function App() {
 
   const handleUpdateTaskProgressInline = (id: string, progress: number) => {
     setTasks(tasks.map(t => t.id === id ? { ...t, progress } : t));
+  };
+
+  // --- 드래그 앤 드롭을 이용한 세부 업무 순서 정렬 및 단계 이동 처리 ---
+  const handleTaskDragStart = (e: React.DragEvent, taskId: string) => {
+    setDraggedTaskId(taskId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", taskId);
+  };
+
+  const handleTaskDragOver = (e: React.DragEvent, taskId: string) => {
+    e.preventDefault();
+    if (draggedTaskId !== taskId) {
+      setDragOverTaskId(taskId);
+    }
+  };
+
+  const handleTaskDragLeave = () => {
+    setDragOverTaskId(null);
+  };
+
+  const handleTaskDragEnd = () => {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+  };
+
+  const handleTaskDrop = (e: React.DragEvent, targetTaskId: string, targetPhaseId: string) => {
+    e.preventDefault();
+    if (!draggedTaskId || draggedTaskId === targetTaskId) {
+      setDraggedTaskId(null);
+      setDragOverTaskId(null);
+      return;
+    }
+
+    const nextTasks = [...tasks];
+    const dragIdx = nextTasks.findIndex(t => t.id === draggedTaskId);
+    const targetIdx = nextTasks.findIndex(t => t.id === targetTaskId);
+
+    if (dragIdx > -1 && targetIdx > -1) {
+      const dragTask = { ...nextTasks[dragIdx] };
+      // 만약 타겟 구분단계(페이즈)가 바뀌었다면 페이즈 소속도 갱신
+      if (dragTask.phaseId !== targetPhaseId) {
+        dragTask.phaseId = targetPhaseId;
+      }
+      
+      // 기존 위치 삭제
+      nextTasks.splice(dragIdx, 1);
+      
+      // 제거 후 타겟 위치 기준 신규 인덱스 추출 및 삽입
+      const finalTargetIdx = nextTasks.findIndex(t => t.id === targetTaskId);
+      if (finalTargetIdx > -1) {
+        nextTasks.splice(finalTargetIdx, 0, dragTask);
+      } else {
+        // 배열 끝 또는 오차 발생시
+        nextTasks.push(dragTask);
+      }
+
+      setTasks(nextTasks);
+      showToast("↕️ 드래그 앤 드롭으로 세부 업무 순서를 변경하였습니다.");
+    }
+
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+  };
+
+  const handlePhaseDragStart = (e: React.DragEvent, phaseId: string) => {
+    setDraggedPhaseId(phaseId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handlePhaseDragEnd = () => {
+    setDraggedPhaseId(null);
+    setDragOverPhaseId(null);
+  };
+
+  const handlePhaseDragOver = (e: React.DragEvent, phaseId: string) => {
+    e.preventDefault();
+    if (draggedPhaseId && draggedPhaseId !== phaseId) {
+      setDragOverPhaseId(phaseId);
+    }
+  };
+
+  const handlePhaseDragLeave = () => {
+    setDragOverPhaseId(null);
+  };
+
+  const handlePhaseDrop = (e: React.DragEvent, targetPhaseId: string) => {
+    e.preventDefault();
+    
+    // 1. 만약 태스크를 드래그 중인 경우 (세부 업무의 단계 이동)
+    if (draggedTaskId) {
+      const nextTasks = [...tasks];
+      const dragIdx = nextTasks.findIndex(t => t.id === draggedTaskId);
+      if (dragIdx > -1) {
+        const dragTask = { ...nextTasks[dragIdx] };
+        
+        if (dragTask.phaseId !== targetPhaseId) {
+          dragTask.phaseId = targetPhaseId;
+          nextTasks.splice(dragIdx, 1);
+          nextTasks.push(dragTask); // 해당 단계 최하단으로 정비
+          setTasks(nextTasks);
+          const pName = phases.find(ph => ph.id === targetPhaseId)?.name || "";
+          showToast(`📂 선택한 세부 업무가 [${pName}] 단계의 하단으로 이동되었습니다.`);
+        }
+      }
+    }
+    // 2. 만약 단계를 드래그 중인 경우 (구분 단계의 순서 변경)
+    else if (draggedPhaseId) {
+      if (draggedPhaseId === targetPhaseId) {
+        setDraggedPhaseId(null);
+        setDragOverPhaseId(null);
+        return;
+      }
+
+      const nextPhases = [...phases];
+      const dragIdx = nextPhases.findIndex(p => p.id === draggedPhaseId);
+      const targetIdx = nextPhases.findIndex(p => p.id === targetPhaseId);
+
+      if (dragIdx > -1 && targetIdx > -1) {
+        const dragPhase = nextPhases[dragIdx];
+        nextPhases.splice(dragIdx, 1);
+        
+        const finalTargetIdx = nextPhases.findIndex(p => p.id === targetPhaseId);
+        if (finalTargetIdx > -1) {
+          nextPhases.splice(finalTargetIdx, 0, dragPhase);
+        } else {
+          nextPhases.push(dragPhase);
+        }
+
+        setPhases(nextPhases);
+        showToast("↕️ 드래그 앤 드롭으로 구분 단계(Phase) 순서를 변경하였습니다.");
+      }
+    }
+
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    setDraggedPhaseId(null);
+    setDragOverPhaseId(null);
   };
 
   const handleSaveQuickMemo = (taskId: string) => {
@@ -2205,14 +2349,39 @@ export default function App() {
                         : 0;
 
                       return (
-                        <div key={phase.id} className="bg-white">
+                        <div 
+                          key={phase.id} 
+                          className={`bg-white transition-all duration-200 ${
+                            draggedPhaseId === phase.id 
+                              ? "opacity-50 scale-[0.99] border-dashed border border-indigo-200" 
+                              : dragOverPhaseId === phase.id 
+                              ? "bg-indigo-50/20 border-t-2 border-t-indigo-600 border-b border-indigo-150" 
+                              : ""
+                          }`}
+                          onDragOver={(e) => handlePhaseDragOver(e, phase.id)}
+                          onDragLeave={handlePhaseDragLeave}
+                          onDrop={(e) => handlePhaseDrop(e, phase.id)}
+                        >
                           
                           {/* Phase Header Row */}
-                          <div className="p-4 flex justify-between items-center bg-slate-50/40 border-b border-slate-100 group transition-all">
-                            <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                          <div 
+                            draggable={!isCleanView}
+                            onDragStart={(e) => handlePhaseDragStart(e, phase.id)}
+                            onDragEnd={handlePhaseDragEnd}
+                            className={`p-4 flex justify-between items-center bg-slate-50/40 border-b border-slate-100 group transition-all ${!isCleanView ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          >
+                            <div className="flex items-center space-x-2 min-w-0 flex-1">
+                              {!isCleanView && (
+                                <div className="text-slate-400 hover:text-indigo-500 p-0.5 transition-colors shrink-0">
+                                  <GripVertical className="w-3.5 h-3.5" />
+                                </div>
+                              )}
                               <span className={`w-3 h-3 rounded-full shrink-0 ${phaseColor.line}`}></span>
                               <span
-                                onClick={() => handleEditPhase(phase)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditPhase(phase);
+                                }}
                                 className="font-extrabold text-xs md:text-sm text-slate-900 hover:text-indigo-600 hover:underline cursor-pointer truncate"
                                 title="단계 설정 수정"
                               >
@@ -2237,32 +2406,56 @@ export default function App() {
                           {/* Task Child Component List */}
                           {phaseTasks.map(task => {
                             const isMemoEditing = quickMemoTaskId === task.id;
+                            const isDragging = draggedTaskId === task.id;
+                            const isDragOver = dragOverTaskId === task.id;
 
                             return (
                               <div
                                 key={task.id}
-                                className="pl-8 pr-4 min-h-[76px] py-3.5 bg-slate-50/20 hover:bg-slate-50/70 border-b border-slate-100/60 transition-all flex flex-col justify-center space-y-2.5 group"
+                                draggable={!isCleanView}
+                                onDragStart={(e) => handleTaskDragStart(e, task.id)}
+                                onDragOver={(e) => handleTaskDragOver(e, task.id)}
+                                onDragLeave={handleTaskDragLeave}
+                                onDragEnd={handleTaskDragEnd}
+                                onDrop={(e) => handleTaskDrop(e, task.id, phase.id)}
+                                className={`pl-6 pr-4 min-h-[76px] py-3.5 border-b transition-all flex flex-col justify-center space-y-2.5 group relative ${
+                                  isDragging 
+                                    ? "bg-indigo-50/20 opacity-40 border-dashed border-indigo-250" 
+                                    : isDragOver
+                                    ? "bg-indigo-50/50 border-t-2 border-t-indigo-600 border-b border-indigo-100" 
+                                    : "bg-slate-50/10 hover:bg-slate-55/60 border-slate-100/60"
+                                }`}
                               >
                                 <div className="flex justify-between items-start w-full gap-2">
-                                  <div className="min-w-0 pr-1 flex-1">
-                                    <p
-                                      onClick={() => handleEditTask(task)}
-                                      className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate"
-                                      title="태스크 상세 정보 변경"
-                                    >
-                                      {task.name}
-                                    </p>
-                                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1.5 text-[10px] text-slate-400 font-bold">
-                                      <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                                        <User className="w-3 h-3 text-slate-400" />
-                                        {task.owner || "미지정"}
-                                      </span>
-                                      <span>{task.startDate} ~ {task.endDate}</span>
-                                      {task.hasOrder && (
-                                        <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded flex items-center gap-0.5" title="발주시 입고 예상 납기 연동 상태">
-                                          <span>📦 발주납기: <strong>{task.orderLeadTime || 1}M</strong></span>
+                                  <div className="min-w-0 pr-1 flex-1 flex items-start gap-2">
+                                    {!isCleanView && (
+                                      <div 
+                                        className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-indigo-500 p-0.5 mt-0.5 transition-colors shrink-0"
+                                        title="드래그하여 순서 변경"
+                                      >
+                                        <GripVertical className="w-3.5 h-3.5" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <p
+                                        onClick={() => handleEditTask(task)}
+                                        className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate"
+                                        title="태스크 상세 정보 변경"
+                                      >
+                                        {task.name}
+                                      </p>
+                                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1.5 text-[10px] text-slate-400 font-bold">
+                                        <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                          <User className="w-3 h-3 text-slate-400" />
+                                          {task.owner || "미지정"}
                                         </span>
-                                      )}
+                                        <span>{task.startDate} ~ {task.endDate}</span>
+                                        {task.hasOrder && (
+                                          <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded flex items-center gap-0.5" title="발주시 입고 예상 납기 연동 상태">
+                                            <span>📦 발주납기: <strong>{task.orderLeadTime || 1}M</strong></span>
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
 
