@@ -838,29 +838,66 @@ export default function App() {
     const N = displayedMonths.length;
     if (N === 0) return 0;
 
-    const range = getTimelineDateRange();
-    const start = parseSafeDate(range.startDate);
-    const startYear = start.getFullYear();
-    const startMonth = start.getMonth();
+    const targetYear = d.getFullYear();
+    const targetMonth = d.getMonth();
 
-    const Y = d.getFullYear();
-    const M = d.getMonth();
-    const day = d.getDate();
+    // 1. 원본 노출 년/월 배열(displayedMonths)에서 정확한 컬럼 인덱스를 색인 매핑합니다.
+    let foundIdx = displayedMonths.findIndex(
+      m => m.getFullYear() === targetYear && m.getMonth() === targetMonth
+    );
 
-    const monthsCount = (Y - startYear) * 12 + (M - startMonth);
-    const numDays = new Date(Y, M + 1, 0).getDate();
-
-    let ratio = 0;
-    if (isEnd) {
-      ratio = day / numDays;
-    } else {
-      ratio = (day - 1) / numDays;
+    // 2. 만약 자바스크립트 Date 오프셋 차이나 연말/연초 경계에서 색인 실패 시, 날짜 시간 기준 탐색 범위로 보정
+    if (foundIdx === -1) {
+      const dTime = d.getTime();
+      for (let i = 0; i < N; i++) {
+        const mDate = displayedMonths[i];
+        const mStart = new Date(mDate.getFullYear(), mDate.getMonth(), 1).getTime();
+        const mEnd = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 1).getTime();
+        if (dTime >= mStart && dTime < mEnd) {
+          foundIdx = i;
+          break;
+        }
+      }
     }
 
-    const val = monthsCount + ratio;
-    if (val < 0) return 0;
-    if (val > N) return N;
-    return val;
+    const numDays = new Date(targetYear, targetMonth + 1, 0).getDate();
+    let ratio = 0;
+    if (isEnd) {
+      ratio = d.getDate() / numDays;
+    } else {
+      ratio = (d.getDate() - 1) / numDays;
+    }
+
+    if (foundIdx !== -1) {
+      return foundIdx + ratio;
+    }
+
+    // 예외 상황 대비 시작/종료 범위 기준 보정 가드라인
+    const firstDate = displayedMonths[0];
+    const firstDateTime = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1).getTime();
+
+    const lastDate = displayedMonths[N - 1];
+    const lastDateTime = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, 1).getTime();
+
+    const dTime = d.getTime();
+
+    if (dTime < firstDateTime) {
+      return 0;
+    }
+    if (dTime >= lastDateTime) {
+      return N;
+    }
+
+    // 중간 이빠진 빈 공간 대응 탐색기
+    for (let i = 0; i < N; i++) {
+      const mDate = displayedMonths[i];
+      const mTime = new Date(mDate.getFullYear(), mDate.getMonth(), 1).getTime();
+      if (dTime < mTime) {
+        return i;
+      }
+    }
+
+    return N;
   };
 
   const getLeadTimeWidthPercent = (endDateStr: string, leadTimeMonths: number) => {
@@ -3279,7 +3316,7 @@ export default function App() {
                                     </div>
 
                                     {/* Right Side Task Timeline Cell (Height dynamic alignment!) */}
-                                    <div className="flex-grow min-w-[800px] relative bg-white hover:bg-slate-50/5 transition-colors min-h-[72px] py-4">
+                                    <div className="flex-grow min-w-[800px] relative bg-white hover:bg-slate-50/5 transition-colors min-h-[110px] py-4">
                                       {/* Subtle background dividers representing months */}
                                       <div className="absolute inset-0 flex pointer-events-none">
                                         {getGanttMonths().map((_, idx) => (
@@ -3339,13 +3376,13 @@ export default function App() {
                                         const badgeLeft = baseLeft + leadWidth;
                                         let offsetStyle: React.CSSProperties = {
                                           left: `${badgeLeft}%`,
-                                          top: '12px',
+                                          top: '46px',
                                           transform: 'translateX(6px)'
                                         };
                                         if (badgeLeft > 80) {
                                           offsetStyle = {
                                             left: `${badgeLeft}%`,
-                                            top: '12px',
+                                            top: '46px',
                                             transform: 'translateX(-100%) translateX(-6px)'
                                           };
                                         }
@@ -3379,7 +3416,7 @@ export default function App() {
                                         className="absolute text-[11px] font-semibold text-slate-500 hover:text-indigo-600 cursor-pointer whitespace-nowrap z-10"
                                         style={{
                                           left: `${barPlacement.left}%`,
-                                          top: '44px'
+                                          top: '78px'
                                         }}
                                       >
                                         {task.name}
@@ -3399,7 +3436,7 @@ export default function App() {
                               )}
                             </div>
                           );
-                        })}
+                        })}`
                       </div>
 
                     </div>
