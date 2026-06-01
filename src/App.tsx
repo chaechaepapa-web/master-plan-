@@ -42,8 +42,8 @@ import { ProjectInfo, Phase, Task, Milestone, Risk } from "./types";
 const defaultProject: ProjectInfo = {
   title: "차세대 클라우드 ERP 플랫폼 구축",
   pm: "김기획",
-  startDate: "2026-06-01",
-  endDate: "2026-12-31"
+  startDate: "2026-03-01",
+  endDate: "2026-09-30"
 };
 
 const defaultPhases: Phase[] = [
@@ -53,20 +53,20 @@ const defaultPhases: Phase[] = [
 ];
 
 const defaultTasks: Task[] = [
-  { id: "t1", phaseId: "p1", name: "비즈니스 요구분석서 최종 합의", startDate: "2026-06-01", endDate: "2026-06-15", progress: 100, owner: "김PM" },
-  { id: "t2", phaseId: "p1", name: "WBS 승인 및 마스터플랜 픽스", startDate: "2026-06-16", endDate: "2026-06-30", progress: 100, owner: "김PM" },
-  { id: "t3", phaseId: "p2", name: "DB 모델링 / 메인 서버 하드웨어 장비 발주", startDate: "2026-07-01", endDate: "2026-07-15", progress: 80, owner: "이아키", hasOrder: true, orderLeadTime: 3 },
-  { id: "t4", phaseId: "p2", name: "API 스펙 문서 작성 및 상용 솔루션 라이선스 발주", startDate: "2026-07-10", endDate: "2026-07-25", progress: 60, owner: "강서버", hasOrder: true, orderLeadTime: 2 },
-  { id: "t5", phaseId: "p3", name: "인하우스 테스트용 알파 릴리즈", startDate: "2026-08-01", endDate: "2026-09-15", progress: 10, owner: "박개발" },
-  { id: "t6", phaseId: "p3", name: "QA팀 검증 및 픽스 (베타 릴리즈)", startDate: "2026-09-20", endDate: "2026-11-20", progress: 0, owner: "최보안" }
+  { id: "t1", phaseId: "p1", name: "비즈니스 요구분석서 최종 합의", startDate: "2026-03-01", endDate: "2026-03-15", progress: 100, owner: "김PM" },
+  { id: "t2", phaseId: "p1", name: "WBS 승인 및 마스터플랜 픽스", startDate: "2026-03-16", endDate: "2026-03-30", progress: 100, owner: "김PM" },
+  { id: "t3", phaseId: "p2", name: "DB 모델링 / 메인 서버 하드웨어 장비 발주", startDate: "2026-04-01", endDate: "2026-04-15", progress: 80, owner: "이아키", hasOrder: true, orderLeadTime: 3 },
+  { id: "t4", phaseId: "p2", name: "API 스펙 문서 작성 및 상용 솔루션 라이선스 발주", startDate: "2026-04-10", endDate: "2026-04-25", progress: 60, owner: "강서버", hasOrder: true, orderLeadTime: 2 },
+  { id: "t5", phaseId: "p3", name: "인하우스 테스트용 알파 릴리즈", startDate: "2026-05-01", endDate: "2026-06-15", progress: 10, owner: "박개발" },
+  { id: "t6", phaseId: "p3", name: "QA팀 검증 및 픽스 (베타 릴리즈)", startDate: "2026-06-20", endDate: "2026-08-20", progress: 0, owner: "최보안" }
 ];
 
 const defaultMilestones: Milestone[] = [
-  { id: "m1", name: "요구사항 확정 및 WBS 승인", targetDate: "2026-06-30", status: "완료", progress: 100, owner: "김PM", deliverable: "요구사항 정의서" },
-  { id: "m2", name: "DB 모델링 및 아키텍처 수립", targetDate: "2026-07-25", status: "진행", progress: 80, owner: "이아키", deliverable: "ERD, API 스펙" },
-  { id: "m3", name: "알파 릴리즈 (인하우스 테스트)", targetDate: "2026-09-15", status: "예정", progress: 10, owner: "박개발", deliverable: "알파 버전 앱" },
-  { id: "m4", name: "베타 릴리즈 및 보안 감사", targetDate: "2026-11-20", status: "예정", progress: 0, owner: "최보안", deliverable: "보안 리포트, 베타 앱" },
-  { id: "m5", name: "최종 상용화 릴리즈", targetDate: "2026-12-31", status: "예정", progress: 0, owner: "김PM", deliverable: "Production 배포" }
+  { id: "m1", name: "요구사항 확정 및 WBS 승인", targetDate: "2026-03-30", status: "완료", progress: 100, owner: "김PM", deliverable: "요구사항 정의서" },
+  { id: "m2", name: "DB 모델링 및 아키텍처 수립", targetDate: "2026-04-25", status: "진행", progress: 80, owner: "이아키", deliverable: "ERD, API 스펙" },
+  { id: "m3", name: "알파 릴리즈 (인하우스 테스트)", targetDate: "2026-06-15", status: "예정", progress: 10, owner: "박개발", deliverable: "알파 버전 앱" },
+  { id: "m4", name: "베타 릴리즈 및 보안 감사", targetDate: "2026-08-20", status: "예정", progress: 0, owner: "최보안", deliverable: "보안 리포트, 베타 앱" },
+  { id: "m5", name: "최종 상용화 릴리즈", targetDate: "2026-09-30", status: "예정", progress: 0, owner: "김PM", deliverable: "Production 배포" }
 ];
 
 const defaultRisks: Risk[] = [
@@ -492,8 +492,64 @@ export default function App() {
   const [quickMemoText, setQuickMemoText] = useState<string>("");
   const [wbsBulkText, setWbsBulkText] = useState<string>("");
 
-  // 시스템 기준 날짜 (현재 local time: 2026-05-28)
-  const todayStr = "2026-05-28";
+  // 시스템 기준 날짜 (현재 local time: 2026-02-28, 프로젝트 시작 1일 전)
+  const todayStr = "2026-02-28";
+
+  // 3월 일정 매칭을 위한 레거시 데이터 마이그레이션 효과 (한 번만 실행)
+  useEffect(() => {
+    const migrated = localStorage.getItem("hb_legacy_migrated_to_march_v2");
+    if (!migrated) {
+      setProjects(prev => prev.map(p => {
+        if (p.startDate === "2026-06-01" && p.endDate === "2026-12-31") {
+          return { ...p, startDate: "2026-03-01", endDate: "2026-09-30" };
+        }
+        return p;
+      }));
+
+      setProject(prev => {
+        if (prev.startDate === "2026-06-01" && prev.endDate === "2026-12-31") {
+          return { ...prev, startDate: "2026-03-01", endDate: "2026-09-30" };
+        }
+        return prev;
+      });
+
+      setTasks(prev => prev.map(t => {
+        let nStart = t.startDate;
+        let nEnd = t.endDate;
+        if (t.startDate === "2026-06-01") nStart = "2026-03-01";
+        if (t.endDate === "2026-06-15") nEnd = "2026-03-15";
+        
+        if (t.startDate === "2026-06-16") nStart = "2026-03-16";
+        if (t.endDate === "2026-06-30") nEnd = "2026-03-30";
+        
+        if (t.startDate === "2026-07-01") nStart = "2026-04-01";
+        if (t.endDate === "2026-07-15") nEnd = "2026-04-15";
+        
+        if (t.startDate === "2026-07-10") nStart = "2026-04-10";
+        if (t.endDate === "2026-07-25") nEnd = "2026-04-25";
+        
+        if (t.startDate === "2026-08-01") nStart = "2026-05-01";
+        if (t.endDate === "2026-09-15") nEnd = "2026-06-15";
+        
+        if (t.startDate === "2026-09-20") nStart = "2026-06-20";
+        if (t.endDate === "2026-11-20") nEnd = "2026-08-20";
+
+        return { ...t, startDate: nStart, endDate: nEnd };
+      }));
+
+      setMilestones(prev => prev.map(m => {
+        let nTarget = m.targetDate;
+        if (m.targetDate === "2026-06-30") nTarget = "2026-03-30";
+        if (m.targetDate === "2026-07-25") nTarget = "2026-04-25";
+        if (m.targetDate === "2026-09-15") nTarget = "2026-06-15";
+        if (m.targetDate === "2026-11-20") nTarget = "2026-08-20";
+        if (m.targetDate === "2026-12-31") nTarget = "2026-09-30";
+        return { ...m, targetDate: nTarget };
+      }));
+
+      localStorage.setItem("hb_legacy_migrated_to_march_v2", "true");
+    }
+  }, []);
 
   // 프로젝트별 자동 보존 및 상호 매핑 정책
   useEffect(() => {
@@ -532,6 +588,104 @@ export default function App() {
     setEditingProject({ ...project });
   }, [project]);
 
+  // 🔄 프로젝트 시작일이 6월로 설정된 경우 3월로 자동 리스케일링 및 일괄 동기화 마이그레이션 교정기 (사용자 로컬 스토리지 한정)
+  useEffect(() => {
+    if (project.startDate === "2026-06-01" && project.endDate === "2026-12-31") {
+      const shiftDateBack3Months = (dateStr: string) => {
+        if (!dateStr || typeof dateStr !== "string") return dateStr;
+        const parts = dateStr.split("-");
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          let month = parseInt(parts[1], 10);
+          let day = parseInt(parts[2], 10);
+          if (year === 2026) {
+            if (month >= 6 && month <= 12) {
+              month = month - 3;
+              if (month === 9 && day > 30) day = 30;
+              if (month === 4 && day > 30) day = 30;
+              if (month === 6 && day > 30) day = 30;
+              return `${year}-${month < 10 ? '0' : ''}${month}-${day < 10 ? '0' : ''}${day}`;
+            }
+          }
+        }
+        return dateStr;
+      };
+
+      // 1. 프로젝트 단일 상태 교정
+      setProject(prev => ({
+        ...prev,
+        startDate: "2026-03-01",
+        endDate: "2026-09-30"
+      }));
+
+      // 2. 전체 프로젝트 목록 교정
+      setProjects(prev => prev.map(p => {
+        if (p.id === activeProjectId) {
+          return { ...p, startDate: "2026-03-01", endDate: "2026-09-30" };
+        }
+        return p;
+      }));
+
+      // 3. 테스크 목록 일체 시프트
+      setTasks(prev => prev.map(t => ({
+        ...t,
+        startDate: shiftDateBack3Months(t.startDate),
+        endDate: shiftDateBack3Months(t.endDate)
+      })));
+
+      // 4. 마일스톤 목록 일체 시프트
+      setMilestones(prev => prev.map(m => ({
+        ...m,
+        targetDate: shiftDateBack3Months(m.targetDate)
+      })));
+
+      showToast("🔄 프로젝트 스케줄 사양이 3월 동기화 규격으로 자동 교정되었습니다.");
+    }
+  }, [project.startDate, project.endDate, activeProjectId]);
+
+  // ⚡ 마일스톤과 대응되는 태스크/프로젝트 종료일과의 실시간 완벽 매칭 동기화 Hook
+  useEffect(() => {
+    let hasChanged = false;
+    const updatedMilestones = milestones.map(m => {
+      let targetDate = m.targetDate;
+      if (m.id === "m1") {
+        const t2 = tasks.find(t => t.id === "t2");
+        if (t2 && t2.endDate && m.targetDate !== t2.endDate) {
+          targetDate = t2.endDate;
+          hasChanged = true;
+        }
+      } else if (m.id === "m2") {
+        const t4 = tasks.find(t => t.id === "t4");
+        if (t4 && t4.endDate && m.targetDate !== t4.endDate) {
+          targetDate = t4.endDate;
+          hasChanged = true;
+        }
+      } else if (m.id === "m3") {
+        const t5 = tasks.find(t => t.id === "t5");
+        if (t5 && t5.endDate && m.targetDate !== t5.endDate) {
+          targetDate = t5.endDate;
+          hasChanged = true;
+        }
+      } else if (m.id === "m4") {
+        const t6 = tasks.find(t => t.id === "t6");
+        if (t6 && t6.endDate && m.targetDate !== t6.endDate) {
+          targetDate = t6.endDate;
+          hasChanged = true;
+        }
+      } else if (m.id === "m5") {
+        if (project.endDate && m.targetDate !== project.endDate) {
+          targetDate = project.endDate;
+          hasChanged = true;
+        }
+      }
+      return { ...m, targetDate };
+    });
+
+    if (hasChanged) {
+      setMilestones(updatedMilestones);
+    }
+  }, [tasks, project.endDate, milestones]);
+
   // 새로운 프로젝트 추가 입력 폼 데이터
   const [newProjTitle, setNewProjTitle] = useState("");
   const [newProjPm, setNewProjPm] = useState("");
@@ -566,7 +720,7 @@ export default function App() {
     
     // 오늘의 기준일을 초과했음에도 미완료 상태인 지연 마일스톤이 존재하지 않는가?
     const hasSlippedMilestone = milestones.some(m => {
-      const isPast = new Date(m.targetDate) < new Date(todayStr);
+      const isPast = parseSafeDate(m.targetDate) < parseSafeDate(todayStr);
       return m.status !== "완료" && isPast;
     });
 
@@ -678,113 +832,6 @@ export default function App() {
     return endDateStr;
   };
 
-  const getLeadTimeWidthPercent = (endDateStr: string, leadTimeMonths: number) => {
-    const range = getTimelineDateRange();
-    const projStart = range.startMs;
-    const projEnd = range.endMs;
-    const totalDuration = projEnd - projStart;
-    if (totalDuration <= 0) return 0;
-
-    const taskEnd = parseSafeDate(endDateStr);
-    const leadEnd = new Date(taskEnd);
-    leadEnd.setMonth(leadEnd.getMonth() + leadTimeMonths);
-    
-    const taskEndTime = taskEnd.getTime();
-    let leadEndTime = leadEnd.getTime();
-    if (leadEndTime > projEnd) leadEndTime = projEnd; // 프로젝트 만료 기한 클리핑
-
-    const leadSpan = leadEndTime - taskEndTime;
-    if (leadSpan <= 0) return 0;
-
-    return (leadSpan / totalDuration) * 100;
-  };
-
-  // --- 타임라인 바 가로 백분율 위치 연산 엔진 ---
-  const calculateTimelineBarPosition = (startStr: string, endStr: string) => {
-    const range = getTimelineDateRange();
-    const projStart = range.startMs;
-    const projEnd = range.endMs;
-    let taskStart = parseSafeDate(startStr).getTime();
-    let taskEnd = parseSafeDate(endStr).getTime();
-
-    if (taskStart < projStart) taskStart = projStart;
-    if (taskEnd > projEnd) taskEnd = projEnd;
-
-    const totalDuration = projEnd - projStart;
-    if (totalDuration <= 0) return { left: 0, width: 100 };
-
-    let leftPercent = ((taskStart - projStart) / totalDuration) * 100;
-    let widthPercent = ((taskEnd - taskStart) / totalDuration) * 100;
-
-    if (widthPercent < 2) widthPercent = 2; // 최소 가시성 확보
-    if (leftPercent < 0) leftPercent = 0;
-    if (leftPercent + widthPercent > 100) widthPercent = 100 - leftPercent;
-
-    return { left: leftPercent, width: widthPercent };
-  };
-
-  const getTaskMilestones = (task: Task) => {
-    if (!showMilestonesOnGantt) return [];
-    return milestones.filter(m => {
-      let bestTask = tasks.find(t => t.endDate === m.targetDate);
-      if (!bestTask) {
-        bestTask = tasks.find(t => t.startDate <= m.targetDate && t.endDate >= m.targetDate);
-      }
-      if (!bestTask && tasks.length > 0) {
-        const mTime = new Date(m.targetDate).getTime();
-        let minDiff = Infinity;
-        let closest = tasks[0];
-        for (const t of tasks) {
-          const tEnd = new Date(t.endDate).getTime();
-          const diff = Math.abs(tEnd - mTime);
-          if (diff < minDiff) {
-            minDiff = diff;
-            closest = t;
-          }
-        }
-        bestTask = closest;
-      }
-      return bestTask && bestTask.id === task.id;
-    });
-  };
-
-  // --- 간트 개월 헤더 배열 계산 ---
-  const getGanttMonths = () => {
-    const range = getTimelineDateRange();
-    const start = new Date(range.startDate);
-    const end = new Date(range.endDate);
-    const months: Date[] = [];
-    const current = new Date(start.getFullYear(), start.getMonth(), 1);
-
-    // 무한 루프 예방 및 방어 코드
-    let safetyCounter = 0;
-    while (current <= end && safetyCounter < 100) {
-      months.push(new Date(current));
-      current.setMonth(current.getMonth() + 1);
-      safetyCounter++;
-    }
-    return months;
-  };
-
-  const getPrintGanttMonths = () => {
-    const allMonths = getGanttMonths();
-    const filteredTasks = getFilteredTasks(tasks);
-    if (filteredTasks.length === 0) return allMonths;
-
-    return allMonths.filter(month => {
-      const year = month.getFullYear();
-      const mIdx = month.getMonth();
-      const monthStart = new Date(year, mIdx, 1).getTime();
-      const monthEnd = new Date(year, mIdx + 1, 1).getTime() - 1;
-
-      return filteredTasks.some(task => {
-        const tStart = new Date(task.startDate).getTime();
-        const tEnd = new Date(task.endDate).getTime();
-        return tStart <= monthEnd && tEnd >= monthStart;
-      });
-    });
-  };
-
   const getFractionalMonthIndex = (dateStr: string, displayedMonths: Date[]) => {
     const d = parseSafeDate(dateStr);
     const dTime = d.getTime();
@@ -823,6 +870,106 @@ export default function App() {
     return 0;
   };
 
+  const getLeadTimeWidthPercent = (endDateStr: string, leadTimeMonths: number) => {
+    const displayedMonths = getGanttMonths();
+    const N = displayedMonths.length;
+    if (N === 0) return 0;
+
+    const taskEnd = parseSafeDate(endDateStr);
+    const leadEnd = new Date(taskEnd);
+    leadEnd.setMonth(leadEnd.getMonth() + leadTimeMonths);
+    
+    const formatDigit = (num: number) => num < 10 ? `0${num}` : `${num}`;
+    const leadEndStr = `${leadEnd.getFullYear()}-${formatDigit(leadEnd.getMonth() + 1)}-${formatDigit(leadEnd.getDate())}`;
+
+    const endIdx = getFractionalMonthIndex(endDateStr, displayedMonths);
+    const leadEndIdx = getFractionalMonthIndex(leadEndStr, displayedMonths);
+
+    let leadWidth = ((leadEndIdx - endIdx) / N) * 100;
+    return leadWidth > 0 ? leadWidth : 0;
+  };
+
+  // --- 타임라인 바 가로 백분율 위치 연산 엔진 ---
+  const calculateTimelineBarPosition = (startStr: string, endStr: string) => {
+    const displayedMonths = getGanttMonths();
+    const N = displayedMonths.length;
+    if (N === 0) return { left: 0, width: 100 };
+
+    const startIdx = getFractionalMonthIndex(startStr, displayedMonths);
+    const endIdx = getFractionalMonthIndex(endStr, displayedMonths);
+
+    let leftPercent = (startIdx / N) * 100;
+    let widthPercent = ((endIdx - startIdx) / N) * 100;
+
+    if (widthPercent < 2) widthPercent = 2; // 최소 가시성 확보
+    if (leftPercent < 0) leftPercent = 0;
+    if (leftPercent + widthPercent > 100) widthPercent = 100 - leftPercent;
+
+    return { left: leftPercent, width: widthPercent };
+  };
+
+  const getTaskMilestones = (task: Task) => {
+    if (!showMilestonesOnGantt) return [];
+    return milestones.filter(m => {
+      let bestTask = tasks.find(t => t.endDate === m.targetDate);
+      if (!bestTask) {
+        bestTask = tasks.find(t => t.startDate <= m.targetDate && t.endDate >= m.targetDate);
+      }
+      if (!bestTask && tasks.length > 0) {
+        const mTime = parseSafeDate(m.targetDate).getTime();
+        let minDiff = Infinity;
+        let closest = tasks[0];
+        for (const t of tasks) {
+          const tEnd = parseSafeDate(t.endDate).getTime();
+          const diff = Math.abs(tEnd - mTime);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = t;
+          }
+        }
+        bestTask = closest;
+      }
+      return bestTask && bestTask.id === task.id;
+    });
+  };
+
+  // --- 간트 개월 헤더 배열 계산 ---
+  const getGanttMonths = () => {
+    const range = getTimelineDateRange();
+    const start = parseSafeDate(range.startDate);
+    const end = parseSafeDate(range.endDate);
+    const months: Date[] = [];
+    const current = new Date(start.getFullYear(), start.getMonth(), 1);
+
+    // 무한 루프 예방 및 방어 코드
+    let safetyCounter = 0;
+    while (current <= end && safetyCounter < 100) {
+      months.push(new Date(current));
+      current.setMonth(current.getMonth() + 1);
+      safetyCounter++;
+    }
+    return months;
+  };
+
+  const getPrintGanttMonths = () => {
+    const allMonths = getGanttMonths();
+    const filteredTasks = getFilteredTasks(tasks);
+    if (filteredTasks.length === 0) return allMonths;
+
+    return allMonths.filter(month => {
+      const year = month.getFullYear();
+      const mIdx = month.getMonth();
+      const monthStart = new Date(year, mIdx, 1).getTime();
+      const monthEnd = new Date(year, mIdx + 1, 1).getTime() - 1;
+
+      return filteredTasks.some(task => {
+        const tStart = parseSafeDate(task.startDate).getTime();
+        const tEnd = parseSafeDate(task.endDate).getTime();
+        return tStart <= monthEnd && tEnd >= monthStart;
+      });
+    });
+  };
+
   const calculatePrintTimelineBarPosition = (task: Task, displayedMonths: Date[]) => {
     const N = displayedMonths.length;
     if (N === 0) return { left: 0, width: 100, leadWidth: 0, leadLeft: 0 };
@@ -841,10 +988,11 @@ export default function App() {
     let leadLeft = left + width;
 
     if (task.hasOrder && task.orderLeadTime) {
-      const taskEnd = new Date(task.endDate);
+      const taskEnd = parseSafeDate(task.endDate);
       const leadEnd = new Date(taskEnd);
       leadEnd.setMonth(leadEnd.getMonth() + task.orderLeadTime);
-      const leadEndIdx = getFractionalMonthIndex(leadEnd.toISOString().split('T')[0], displayedMonths);
+      const leadEndStr = `${leadEnd.getFullYear()}-${String(leadEnd.getMonth() + 1).padStart(2, '0')}-${String(leadEnd.getDate()).padStart(2, '0')}`;
+      const leadEndIdx = getFractionalMonthIndex(leadEndStr, displayedMonths);
       leadWidth = ((leadEndIdx - endIdx) / N) * 100;
       if (leadLeft + leadWidth > 100) {
         leadWidth = 100 - leadLeft;
@@ -1482,7 +1630,7 @@ export default function App() {
     md += `- **실시간 헬스 신호**: **${healthStr}**\n\n`;
 
     md += `## 🚩 마일스톤 진척 및 신뢰도 모델 통계\n`;
-    const sortedMs = [...milestones].sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime());
+    const sortedMs = [...milestones].sort((a, b) => parseSafeDate(a.targetDate).getTime() - parseSafeDate(b.targetDate).getTime());
     sortedMs.forEach(m => {
       const conf = calcConfidence(m.id);
       const stIcon = m.status === "완료" ? "✅ [완료]" : (m.status === "진행" ? "🔄 [진행]" : "🗓️ [예정]");
@@ -2581,7 +2729,7 @@ export default function App() {
                   </div>
                   <div className={`p-6 flex-1 ${isCleanView ? '' : 'overflow-y-auto max-h-[400px]'} space-y-4 custom-scrollbar`}>
                     {[...milestones]
-                      .sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime())
+                      .sort((a, b) => parseSafeDate(a.targetDate).getTime() - parseSafeDate(b.targetDate).getTime())
                       .map(m => {
                         const confidence = calcConfidence(m.id);
                         const progressBg = confidence >= 85 ? "bg-emerald-500" : confidence >= 60 ? "bg-amber-500" : "bg-rose-500";
@@ -2779,16 +2927,12 @@ export default function App() {
                       {(() => {
                         if (!showMilestonesOnGantt) return null;
 
-                        const range = getTimelineDateRange();
-                        const projStart = range.startMs;
-                        const projEnd = range.endMs;
-                        const totalSpan = projEnd - projStart;
+                        const displayedMonths = getGanttMonths();
+                        const N = displayedMonths.length;
 
                         const positionedMilestones = milestones.map(m => {
-                          const milestoneTime = new Date(m.targetDate).getTime();
-                          let leftPercent = totalSpan > 0 ? ((milestoneTime - projStart) / totalSpan) * 100 : 0;
-                          if (leftPercent < 0) leftPercent = 0;
-                          if (leftPercent > 100) leftPercent = 100;
+                          const idx = getFractionalMonthIndex(m.targetDate, displayedMonths);
+                          const leftPercent = N > 0 ? (idx / N) * 100 : 0;
                           return { ...m, leftPercent };
                         }).sort((a, b) => a.leftPercent - b.leftPercent);
 
@@ -2809,12 +2953,37 @@ export default function App() {
                         });
 
                         return milestonesWithLevels.map(m => {
+                          const isDone = m.status === "완료";
+                          const isWorking = m.status === "진행";
+                          const circleBg = isDone
+                            ? "bg-slate-400"
+                            : isWorking
+                            ? "bg-indigo-600 animate-pulse"
+                            : "bg-white border border-indigo-500 shadow-sm";
+                          const iconColor = isDone || isWorking ? "text-white" : "text-indigo-600";
+
                           return (
                             <div
                               key={m.id}
                               className="absolute top-0 bottom-0 pointer-events-none flex flex-col items-center z-10"
                               style={{ left: `calc(440px + calc(100% - 440px) * ${m.leftPercent} / 100)` }}
                             >
+                              {/* 마일스톤 원표시 (Circle Indicator) */}
+                              <div
+                                className="absolute top-[16px] -translate-y-1/2 flex flex-col items-center pointer-events-auto group/gantt-ms z-35 cursor-pointer"
+                                onClick={() => {
+                                  setEditingMilestone({ ...m });
+                                  setActiveModal("milestone");
+                                }}
+                              >
+                                <div className={`w-4 h-4 rounded-full ${circleBg} border border-white flex items-center justify-center hover:scale-125 hover:rotate-12 transition-transform duration-150 shadow-sm`} title={`${m.name} (${m.targetDate})`}>
+                                  <Flag className={`w-1.5 h-1.5 ${iconColor}`} />
+                                </div>
+                                {/* 툴팁 말풍선 */}
+                                <div className="absolute top-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] rounded px-2 py-0.5 whitespace-nowrap shadow-md opacity-0 group-hover/gantt-ms:opacity-100 transition-opacity pointer-events-none font-bold z-50">
+                                  {m.name} ({m.targetDate.substring(5)})
+                                </div>
+                              </div>
                               {/* 가이드 수직 점선 */}
                               <div className="w-0 border-l border-dashed border-indigo-500/20 h-full absolute top-0 pointer-events-none"></div>
                             </div>
@@ -3521,16 +3690,12 @@ export default function App() {
                     {(() => {
                       if (!showMilestonesOnGantt) return null;
 
-                      const range = getTimelineDateRange();
-                      const projStart = range.startMs;
-                      const projEnd = range.endMs;
-                      const totalSpan = projEnd - projStart;
+                      const displayedMonths = getGanttMonths();
+                      const N = displayedMonths.length;
 
                       const positionedMilestones = milestones.map(m => {
-                        const milestoneTime = new Date(m.targetDate).getTime();
-                        let leftPercent = totalSpan > 0 ? ((milestoneTime - projStart) / totalSpan) * 100 : 0;
-                        if (leftPercent < 0) leftPercent = 0;
-                        if (leftPercent > 100) leftPercent = 100;
+                        const idx = getFractionalMonthIndex(m.targetDate, displayedMonths);
+                        const leftPercent = N > 0 ? (idx / N) * 100 : 0;
                         return { ...m, leftPercent };
                       }).sort((a, b) => a.leftPercent - b.leftPercent);
 
@@ -3551,12 +3716,37 @@ export default function App() {
                       });
 
                       return milestonesWithLevels.map(m => {
+                        const isDone = m.status === "완료";
+                        const isWorking = m.status === "진행";
+                        const circleBg = isDone
+                          ? "bg-slate-400"
+                          : isWorking
+                          ? "bg-indigo-600 animate-pulse"
+                          : "bg-white border border-indigo-500 shadow-sm";
+                        const iconColor = isDone || isWorking ? "text-white" : "text-indigo-600";
+
                         return (
                           <div
                             key={m.id}
                             className="absolute top-0 bottom-0 pointer-events-none flex flex-col items-center z-20"
                             style={{ left: `${m.leftPercent}%` }}
                           >
+                            {/* 마일스톤 원표시 (Circle Indicator) */}
+                            <div
+                              className="absolute top-[16px] -translate-y-1/2 flex flex-col items-center pointer-events-auto group/gantt-ms z-35 cursor-pointer"
+                              onClick={() => {
+                                  setEditingMilestone({ ...m });
+                                  setActiveModal("milestone");
+                              }}
+                            >
+                              <div className={`w-4 h-4 rounded-full ${circleBg} border border-white flex items-center justify-center hover:scale-125 hover:rotate-12 transition-transform duration-150 shadow-sm`} title={`${m.name} (${m.targetDate})`}>
+                                <Flag className={`w-1.5 h-1.5 ${iconColor}`} />
+                              </div>
+                              {/* 툴팁 말풍선 */}
+                              <div className="absolute top-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] rounded px-2 py-0.5 whitespace-nowrap shadow-md opacity-0 group-hover/gantt-ms:opacity-100 transition-opacity pointer-events-none font-bold z-50">
+                                {m.name} ({m.targetDate.substring(5)})
+                              </div>
+                            </div>
                             {/* 가이드 수직 점선 */}
                             <div className="w-0 border-l border-dashed border-indigo-500/20 h-full absolute top-0 pointer-events-none"></div>
                           </div>
@@ -3760,12 +3950,12 @@ export default function App() {
                   <div className="absolute bottom-6 left-0 right-0 h-1 bg-gradient-to-r from-indigo-100 to-indigo-200 rounded"></div>
                   
                   {milestones
-                    .sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime())
+                    .sort((a, b) => parseSafeDate(a.targetDate).getTime() - parseSafeDate(b.targetDate).getTime())
                     .map((m, idx) => {
                       const range = getTimelineDateRange();
                       const projStart = range.startMs;
                       const projEnd = range.endMs;
-                      const milestoneTime = new Date(m.targetDate).getTime();
+                      const milestoneTime = parseSafeDate(m.targetDate).getTime();
                       const totalSpan = projEnd - projStart;
                       
                       let leftPercent = ((milestoneTime - projStart) / totalSpan) * 100;
@@ -3803,7 +3993,7 @@ export default function App() {
               {/* 디테일 통합 이정표 카드 레이아웃 */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 {milestones
-                  .sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime())
+                  .sort((a, b) => parseSafeDate(a.targetDate).getTime() - parseSafeDate(b.targetDate).getTime())
                   .map(m => {
                     const confidence = calcConfidence(m.id);
                     const linkedActiveRisks = risks.filter(r => r.msId === m.id && r.status !== "Closed");
