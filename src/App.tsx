@@ -19,6 +19,8 @@ import {
   Settings,
   X,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Sparkles,
   UserCheck,
   ArrowLeft,
@@ -426,6 +428,7 @@ export default function App() {
 
   // --- 스크린샷 캡처용 깔끔한 보기(클린 뷰) 및 검색·필터링 상태 ---
   const [isCleanView, setIsCleanView] = useState<boolean>(false);
+  const [collapsedTaskIds, setCollapsedTaskIds] = useState<Record<string, boolean>>({});
   const [isA3PrintOpen, setIsA3PrintOpen] = useState<boolean>(false);
   const [isA3LandscapePrintOpen, setIsA3LandscapePrintOpen] = useState<boolean>(false);
   const [landscapePrintScale, setLandscapePrintScale] = useState<number>(100);
@@ -3135,6 +3138,7 @@ export default function App() {
                                 const isDragging = draggedTaskId === task.id;
                                 const isDragOver = dragOverTaskId === task.id;
                                 const barPlacement = calculateTimelineBarPosition(task.startDate, task.endDate);
+                                const isCollapsed = !!collapsedTaskIds[task.id];
 
                                 return (
                                   <div 
@@ -3154,72 +3158,109 @@ export default function App() {
                                     }`}
                                   >
                                     {/* Left Sticky Task Metadata Cell */}
-                                    <div className="w-[440px] shrink-0 sticky left-0 bg-white z-24 border-r border-slate-200 pl-6 pr-4 py-3.5 flex flex-col justify-center space-y-2.5 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                                    <div className={`w-[440px] shrink-0 sticky left-0 bg-white z-24 border-r border-slate-200 pl-6 pr-4 flex flex-col justify-center shadow-[2px_0_5px_rgba(0,0,0,0.02)] transition-all ${
+                                      isCollapsed ? "py-2.5 space-y-1.5" : "py-3.5 space-y-2.5"
+                                    }`}>
                                       <div className="flex justify-between items-start w-full gap-2">
-                                        <div className="min-w-0 pr-1 flex-1 flex items-start gap-2">
+                                        <div className="min-w-0 pr-1 flex-1 flex items-start gap-1.5">
                                           {!isCleanView && (
                                             <div 
-                                              className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-indigo-500 p-0.5 mt-0.5 transition-colors shrink-0"
+                                              className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-indigo-500 p-0.5 mt-1 transition-colors shrink-0"
                                               title="드래그하여 순서 변경"
                                             >
                                               <GripVertical className="w-3.5 h-3.5" />
                                             </div>
                                           )}
+                                          
+                                          {/* Fold/Unfold Collapse Button */}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setCollapsedTaskIds(prev => ({
+                                                ...prev,
+                                                [task.id]: !prev[task.id]
+                                              }));
+                                            }}
+                                            className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer shrink-0 mt-0.5"
+                                            title={isCollapsed ? "상세 정보 펼치기" : "간략히 접기 (제목/일정만 표시)"}
+                                          >
+                                            {isCollapsed ? (
+                                              <ChevronDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                              <ChevronUp className="w-3.5 h-3.5" />
+                                            )}
+                                          </button>
+
                                           <div className="min-w-0 flex-1">
                                             <p
                                               onClick={() => handleEditTask(task)}
-                                              className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate"
+                                              className="text-xs md:text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:underline cursor-pointer truncate mt-1"
                                               title="태스크 상세 정보 변경"
                                             >
                                               {task.name}
                                             </p>
-                                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1.5 text-[10px] text-slate-400 font-bold">
-                                              <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                                                <User className="w-3 h-3 text-slate-400" />
-                                                {task.owner || "미지정"}
-                                              </span>
-                                              <span>{task.startDate} ~ {task.endDate}</span>
-                                              {task.hasOrder && (
-                                                <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded flex items-center gap-0.5" title="발주시 입고 예상 납기 연동 상태">
-                                                  <span>📦 발주납기: <strong>{task.orderLeadTime || 1}M</strong></span>
+                                            
+                                            {isCollapsed ? (
+                                              <div className="flex items-center gap-x-2 mt-1 text-[10px] text-slate-400 font-bold">
+                                                <div className="flex items-center gap-1">
+                                                  <Calendar className="w-3 h-3 text-indigo-400 shrink-0" />
+                                                  <span>{task.startDate} ~ {task.endDate}</span>
+                                                </div>
+                                                <span className="text-[9.5px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.25 rounded shrink-0">
+                                                  진척률: {task.progress}%
                                                 </span>
-                                              )}
-                                            </div>
+                                              </div>
+                                            ) : (
+                                              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1.5 text-[10px] text-slate-400 font-bold">
+                                                <span className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                                  <User className="w-3 h-3 text-slate-400" />
+                                                  {task.owner || "미지정"}
+                                                </span>
+                                                <span>{task.startDate} ~ {task.endDate}</span>
+                                                {task.hasOrder && (
+                                                  <span className="bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded flex items-center gap-0.5" title="발주시 입고 예상 납기 연동 상태">
+                                                    <span>📦 발주납기: <strong>{task.orderLeadTime || 1}M</strong></span>
+                                                  </span>
+                                                )}
+                                              </div>
+                                            )}
                                           </div>
                                         </div>
 
-                                        <div className="flex items-center space-x-2.5 flex-shrink-0">
-                                          {!isCleanView ? (
-                                            <div className="flex items-center space-x-1.5">
-                                              <input
-                                                type="range"
-                                                min="0"
-                                                max="100"
-                                                value={task.progress}
-                                                onChange={(e) => handleUpdateTaskProgressInline(task.id, parseInt(e.target.value))}
-                                                className="w-14 md:w-16 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                                                title="인라인 진척률 직접 튜닝"
-                                              />
-                                              <span className="text-[10px] font-extrabold text-slate-500 w-8 text-right shrink-0">{task.progress}%</span>
-                                            </div>
-                                          ) : (
-                                            <span className="text-xs font-extrabold text-slate-600 pr-2 shrink-0">{task.progress}%</span>
-                                          )}
-                                          {!isCleanView && (
-                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 items-center bg-white/80 p-0.5 rounded-lg border border-slate-100 shadow-sm">
-                                              <button onClick={() => handleEditTask(task)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer" title="상세 정보">
-                                                <Edit2 className="w-3.5 h-3.5" />
-                                              </button>
-                                              <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="업무 삭제">
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            </div>
-                                          )}
-                                        </div>
+                                        {!isCollapsed && (
+                                          <div className="flex items-center space-x-2.5 flex-shrink-0 mt-1">
+                                            {!isCleanView ? (
+                                              <div className="flex items-center space-x-1.5">
+                                                <input
+                                                  type="range"
+                                                  min="0"
+                                                  max="100"
+                                                  value={task.progress}
+                                                  onChange={(e) => handleUpdateTaskProgressInline(task.id, parseInt(e.target.value))}
+                                                  className="w-14 md:w-16 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                                  title="인라인 진척률 직접 튜닝"
+                                                />
+                                                <span className="text-[10px] font-extrabold text-slate-500 w-8 text-right shrink-0">{task.progress}%</span>
+                                              </div>
+                                            ) : (
+                                              <span className="text-xs font-extrabold text-slate-600 pr-2 shrink-0">{task.progress}%</span>
+                                            )}
+                                            {!isCleanView && (
+                                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 items-center bg-white/80 p-0.5 rounded-lg border border-slate-100 shadow-sm">
+                                                <button onClick={() => handleEditTask(task)} className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer" title="상세 정보">
+                                                  <Edit2 className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="업무 삭제">
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
 
                                       {/* 메모 및 사진 퀵 컨트롤 버튼 */}
-                                      {!isCleanView && (
+                                      {!isCleanView && !isCollapsed && (
                                         <div className="flex flex-wrap items-center gap-2 pt-0.5">
                                           <button
                                             onClick={() => {
@@ -3254,8 +3295,8 @@ export default function App() {
                                       )}
 
                                       {/* 인라인 퀵 메모 편집 영역 */}
-                                      {isMemoEditing && (
-                                        <div className="bg-amber-50/20 border border-amber-200/40 rounded-xl p-2.5 space-y-2 mt-1.5">
+                                      {isMemoEditing && !isCollapsed && (
+                                        <div className="bg-amber-50/20 border border-amber-200/40 rounded-xl p-2.5 space-y-2 mt-1.5 font-semibold">
                                           <textarea
                                             value={quickMemoText}
                                             onChange={(e) => setQuickMemoText(e.target.value)}
@@ -3281,7 +3322,7 @@ export default function App() {
                                       )}
 
                                       {/* 저장된 메모 및 참고 사진 동시 표출 */}
-                                      {(task.memo || task.imageUrl) && !isMemoEditing && (
+                                      {(task.memo || task.imageUrl) && !isMemoEditing && !isCollapsed && (
                                         <div className="flex flex-col gap-2 p-2.5 bg-indigo-50/20 border border-indigo-100/30 rounded-xl mt-1">
                                           {task.memo && (
                                             <div className="text-[11px] text-slate-600 leading-relaxed font-semibold flex items-start gap-1.5">
@@ -3316,7 +3357,9 @@ export default function App() {
                                     </div>
 
                                     {/* Right Side Task Timeline Cell (Height dynamic alignment!) */}
-                                    <div className="flex-grow min-w-[800px] relative bg-white hover:bg-slate-50/5 transition-colors min-h-[110px] py-4">
+                                    <div className={`flex-grow min-w-[800px] relative bg-white hover:bg-slate-50/5 transition-all text-slate-800 ${
+                                      isCollapsed ? "min-h-[52px] py-2" : "min-h-[110px] py-4"
+                                    }`}>
                                       {/* Subtle background dividers representing months */}
                                       <div className="absolute inset-0 flex pointer-events-none">
                                         {getGanttMonths().map((_, idx) => (
@@ -3332,7 +3375,7 @@ export default function App() {
                                         style={{
                                           left: `${barPlacement.left}%`,
                                           width: `${barPlacement.width}%`,
-                                          top: '12px'
+                                          top: isCollapsed ? '8px' : '12px'
                                         }}
                                       >
                                         <div
@@ -3358,7 +3401,7 @@ export default function App() {
                                             style={{
                                               left: `${UnitedLeadLeft}%`,
                                               width: `${leadWidth}%`,
-                                              top: '12px'
+                                              top: isCollapsed ? '8px' : '12px'
                                             }}
                                           >
                                             <span className="truncate">🚚 납기:+{task.orderLeadTime}M</span>
@@ -3367,7 +3410,7 @@ export default function App() {
                                       })()}
 
                                       {/* 완료 목표일 및 발주 리드타임 납기일정 표기 바 */}
-                                      {showMilestonesOnGantt && (() => {
+                                      {showMilestonesOnGantt && !isCollapsed && (() => {
                                         const baseLeft = barPlacement.left + barPlacement.width;
                                         const leadWidth = task.hasOrder && task.orderLeadTime && showOrderLeadTimeOnGantt 
                                           ? getLeadTimeWidthPercent(task.endDate, task.orderLeadTime) 
@@ -3411,16 +3454,18 @@ export default function App() {
                                       })()}
 
                                       {/* 도형 바로 아래 텍스트 (줄바꿈 없이 노출) */}
-                                      <div
-                                        onClick={() => handleEditTask(task)}
-                                        className="absolute text-[11px] font-semibold text-slate-500 hover:text-indigo-600 cursor-pointer whitespace-nowrap z-10"
-                                        style={{
-                                          left: `${barPlacement.left}%`,
-                                          top: '78px'
-                                        }}
-                                      >
-                                        {task.name}
-                                      </div>
+                                      {!isCollapsed && (
+                                        <div
+                                          onClick={() => handleEditTask(task)}
+                                          className="absolute text-[11px] font-semibold text-slate-500 hover:text-indigo-600 cursor-pointer whitespace-nowrap z-10"
+                                          style={{
+                                            left: `${barPlacement.left}%`,
+                                            top: '78px'
+                                          }}
+                                        >
+                                          {task.name}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 );
