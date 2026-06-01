@@ -826,48 +826,41 @@ export default function App() {
       const d = parseSafeDate(endDateStr);
       if (!isNaN(d.getTime())) {
         d.setMonth(d.getMonth() + leadTimeMonths);
-        return d.toISOString().split("T")[0];
+        const formatDigit = (num: number) => num < 10 ? `0${num}` : `${num}`;
+        return `${d.getFullYear()}-${formatDigit(d.getMonth() + 1)}-${formatDigit(d.getDate())}`;
       }
     } catch (e) {}
     return endDateStr;
   };
 
-  const getFractionalMonthIndex = (dateStr: string, displayedMonths: Date[]) => {
+  const getFractionalMonthIndex = (dateStr: string, displayedMonths: Date[], isEnd = false) => {
     const d = parseSafeDate(dateStr);
-    const dTime = d.getTime();
     const N = displayedMonths.length;
     if (N === 0) return 0;
 
-    const monthTimes = displayedMonths.map(m => {
-      const start = new Date(m.getFullYear(), m.getMonth(), 1);
-      const end = new Date(m.getFullYear(), m.getMonth() + 1, 1);
-      return {
-        start: start.getTime(),
-        end: end.getTime(),
-      };
-    });
+    const range = getTimelineDateRange();
+    const start = parseSafeDate(range.startDate);
+    const startYear = start.getFullYear();
+    const startMonth = start.getMonth();
 
-    if (dTime <= monthTimes[0].start) {
-      return 0;
-    }
-    if (dTime >= monthTimes[N - 1].end) {
-      return N;
-    }
+    const Y = d.getFullYear();
+    const M = d.getMonth();
+    const day = d.getDate();
 
-    for (let i = 0; i < N; i++) {
-      if (dTime >= monthTimes[i].start && dTime < monthTimes[i].end) {
-        const ratio = (dTime - monthTimes[i].start) / (monthTimes[i].end - monthTimes[i].start);
-        return i + ratio;
-      }
+    const monthsCount = (Y - startYear) * 12 + (M - startMonth);
+    const numDays = new Date(Y, M + 1, 0).getDate();
+
+    let ratio = 0;
+    if (isEnd) {
+      ratio = day / numDays;
+    } else {
+      ratio = (day - 1) / numDays;
     }
 
-    for (let i = 0; i < N - 1; i++) {
-      if (dTime >= monthTimes[i].end && dTime < monthTimes[i + 1].start) {
-        return i + 1;
-      }
-    }
-
-    return 0;
+    const val = monthsCount + ratio;
+    if (val < 0) return 0;
+    if (val > N) return N;
+    return val;
   };
 
   const getLeadTimeWidthPercent = (endDateStr: string, leadTimeMonths: number) => {
@@ -882,8 +875,8 @@ export default function App() {
     const formatDigit = (num: number) => num < 10 ? `0${num}` : `${num}`;
     const leadEndStr = `${leadEnd.getFullYear()}-${formatDigit(leadEnd.getMonth() + 1)}-${formatDigit(leadEnd.getDate())}`;
 
-    const endIdx = getFractionalMonthIndex(endDateStr, displayedMonths);
-    const leadEndIdx = getFractionalMonthIndex(leadEndStr, displayedMonths);
+    const endIdx = getFractionalMonthIndex(endDateStr, displayedMonths, true);
+    const leadEndIdx = getFractionalMonthIndex(leadEndStr, displayedMonths, true);
 
     let leadWidth = ((leadEndIdx - endIdx) / N) * 100;
     return leadWidth > 0 ? leadWidth : 0;
@@ -895,8 +888,8 @@ export default function App() {
     const N = displayedMonths.length;
     if (N === 0) return { left: 0, width: 100 };
 
-    const startIdx = getFractionalMonthIndex(startStr, displayedMonths);
-    const endIdx = getFractionalMonthIndex(endStr, displayedMonths);
+    const startIdx = getFractionalMonthIndex(startStr, displayedMonths, false);
+    const endIdx = getFractionalMonthIndex(endStr, displayedMonths, true);
 
     let leftPercent = (startIdx / N) * 100;
     let widthPercent = ((endIdx - startIdx) / N) * 100;
@@ -974,8 +967,8 @@ export default function App() {
     const N = displayedMonths.length;
     if (N === 0) return { left: 0, width: 100, leadWidth: 0, leadLeft: 0 };
 
-    const startIdx = getFractionalMonthIndex(task.startDate, displayedMonths);
-    const endIdx = getFractionalMonthIndex(task.endDate, displayedMonths);
+    const startIdx = getFractionalMonthIndex(task.startDate, displayedMonths, false);
+    const endIdx = getFractionalMonthIndex(task.endDate, displayedMonths, true);
 
     let left = (startIdx / N) * 100;
     let width = ((endIdx - startIdx) / N) * 100;
@@ -992,7 +985,7 @@ export default function App() {
       const leadEnd = new Date(taskEnd);
       leadEnd.setMonth(leadEnd.getMonth() + task.orderLeadTime);
       const leadEndStr = `${leadEnd.getFullYear()}-${String(leadEnd.getMonth() + 1).padStart(2, '0')}-${String(leadEnd.getDate()).padStart(2, '0')}`;
-      const leadEndIdx = getFractionalMonthIndex(leadEndStr, displayedMonths);
+      const leadEndIdx = getFractionalMonthIndex(leadEndStr, displayedMonths, true);
       leadWidth = ((leadEndIdx - endIdx) / N) * 100;
       if (leadLeft + leadWidth > 100) {
         leadWidth = 100 - leadLeft;
@@ -2931,7 +2924,7 @@ export default function App() {
                         const N = displayedMonths.length;
 
                         const positionedMilestones = milestones.map(m => {
-                          const idx = getFractionalMonthIndex(m.targetDate, displayedMonths);
+                          const idx = getFractionalMonthIndex(m.targetDate, displayedMonths, true);
                           const leftPercent = N > 0 ? (idx / N) * 100 : 0;
                           return { ...m, leftPercent };
                         }).sort((a, b) => a.leftPercent - b.leftPercent);
@@ -3007,7 +3000,7 @@ export default function App() {
                                   {month.getMonth() + 1}월
                                 </div>
                                 {/* 2행: 일 */}
-                                <div className="flex justify-between px-1 py-1.5 text-[8px] font-mono font-medium text-slate-400/80 bg-white/95">
+                                <div className="flex justify-between px-0 py-1.5 text-[8px] font-mono font-medium text-slate-400/80 bg-white/95">
                                   {days.map(day => {
                                     const isTargetDay = day === 1 || day % 5 === 0;
                                     return (
@@ -3694,7 +3687,7 @@ export default function App() {
                       const N = displayedMonths.length;
 
                       const positionedMilestones = milestones.map(m => {
-                        const idx = getFractionalMonthIndex(m.targetDate, displayedMonths);
+                        const idx = getFractionalMonthIndex(m.targetDate, displayedMonths, true);
                         const leftPercent = N > 0 ? (idx / N) * 100 : 0;
                         return { ...m, leftPercent };
                       }).sort((a, b) => a.leftPercent - b.leftPercent);
@@ -3765,7 +3758,7 @@ export default function App() {
                               {month.getMonth() + 1}월
                             </div>
                             {/* 2행: 일 */}
-                            <div className="flex justify-between px-1 py-1.5 text-[8px] font-mono font-medium text-slate-400/80 bg-white/95">
+                            <div className="flex justify-between px-0 py-1.5 text-[8px] font-mono font-medium text-slate-400/80 bg-white/95">
                               {days.map(day => {
                                 const isTargetDay = day === 1 || day % 5 === 0;
                                 return (
@@ -5119,7 +5112,7 @@ export default function App() {
                             {month.getMonth() + 1}월 (Month)
                           </div>
                           {/* Day sub-head ticks */}
-                          <div className="flex justify-between px-1 py-1 text-[8px] font-mono font-bold text-slate-500 bg-slate-50 border-b border-slate-200">
+                          <div className="flex justify-between px-0 py-1 text-[8px] font-mono font-bold text-slate-500 bg-slate-50 border-b border-slate-200">
                             {days.map(day => {
                               const isTargetDay = day === 1 || day % 5 === 0;
                               return (
@@ -5467,7 +5460,7 @@ export default function App() {
                               {month.getMonth() + 1}월
                             </div>
                             {/* Day sub-head ticks */}
-                            <div className="flex justify-between px-1 py-1 text-[7.5px] font-mono font-bold text-slate-500 bg-slate-50 border-b border-slate-200">
+                            <div className="flex justify-between px-0 py-1 text-[7.5px] font-mono font-bold text-slate-500 bg-slate-50 border-b border-slate-200">
                               {days.map(day => {
                                 const isTargetDay = day === 1 || day % 5 === 0;
                                 return (
